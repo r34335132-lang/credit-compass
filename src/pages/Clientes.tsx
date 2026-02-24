@@ -126,7 +126,7 @@ export default function Clientes() {
                     <Link to={`/clientes/${k.cliente.id}`} className="font-medium text-primary hover:underline">{k.cliente.nombre}</Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{(k.cliente as any).asesor?.nombre || '—'}</TableCell>
-                  <TableCell><RiskBadge risk={k.riesgo} size="sm" /></TableCell>
+                  <TableCell><RiskBadge risk={k.riesgo} dpd={k.dpd} size="sm" /></TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.cliente.linea_credito)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.totalFacturado)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.montoVencido)}</TableCell>

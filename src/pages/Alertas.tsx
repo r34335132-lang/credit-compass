@@ -42,7 +42,7 @@ export default function Alertas() {
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-3">
                     <Link to={`/clientes/${a.id}`} className="font-semibold text-primary hover:underline">{a.clienteNombre}</Link>
-                    <RiskBadge risk={a.riesgo} size="sm" />
+                    <RiskBadge risk={a.riesgo} dpd={a.dpd} size="sm" />
                   </div>
                   <p className="text-sm text-muted-foreground">{a.mensaje}</p>
                   <p className="text-xs text-muted-foreground">Asesor: <span className="font-medium">{a.asesorNombre}</span> · DPD: <span className="font-medium">{a.dpd} días</span></p>
