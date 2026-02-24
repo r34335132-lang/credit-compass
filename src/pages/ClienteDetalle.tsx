@@ -38,7 +38,7 @@ export default function ClienteDetalle() {
         <div className="flex-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{cliente.nombre}</h1>
-            <RiskBadge risk={kpi.riesgo} size="lg" />
+            <RiskBadge risk={kpi.riesgo} dpd={kpi.dpd} size="lg" />
           </div>
           <p className="text-muted-foreground">Asesor: {asesor?.nombre || 'Sin asignar'} · Registrado: {format(parseISO(cliente.fecha_registro), 'PP', { locale: es })}</p>
         </div>

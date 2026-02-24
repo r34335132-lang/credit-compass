@@ -55,7 +55,7 @@ export default function AsesorDetalle() {
               {clienteKPIs.map(k => (
                 <TableRow key={k.cliente.id}>
                   <TableCell><Link to={`/clientes/${k.cliente.id}`} className="font-medium text-primary hover:underline">{k.cliente.nombre}</Link></TableCell>
-                  <TableCell><RiskBadge risk={k.riesgo} size="sm" /></TableCell>
+                  <TableCell><RiskBadge risk={k.riesgo} dpd={k.dpd} size="sm" /></TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.totalFacturado)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.montoVencido)}</TableCell>
                   <TableCell className="text-right tabular-nums">{k.dpd}d</TableCell>

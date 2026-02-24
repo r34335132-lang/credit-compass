@@ -181,7 +181,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               {kpis.alertas.slice(0, 5).map((a) => (
                 <div key={a.id} className="flex items-start gap-3 rounded-lg border p-3">
-                  <RiskBadge risk={a.riesgo} size="sm" />
+                  <RiskBadge risk={a.riesgo} dpd={a.dpd} size="sm" />
                   <div className="flex-1">
                     <p className="text-sm font-medium">{a.clienteNombre}</p>
                     <p className="text-xs text-muted-foreground">{a.mensaje}</p>
@@ -219,7 +219,7 @@ export default function Dashboard() {
                       {k.cliente.nombre}
                     </Link>
                   </TableCell>
-                  <TableCell><RiskBadge risk={k.riesgo} size="sm" /></TableCell>
+                  <TableCell><RiskBadge risk={k.riesgo} dpd={k.dpd} size="sm" /></TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.totalFacturado)}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.montoVencido)}</TableCell>
                   <TableCell className="text-right tabular-nums">{k.dpd} días</TableCell>
