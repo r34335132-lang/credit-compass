@@ -9,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, CheckCircle, Search } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Search, Download } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
+import { exportFacturasCSV } from '@/lib/export';
 
 export default function Facturas() {
   const { data: facturas = [] } = useFacturas();
@@ -20,6 +22,7 @@ export default function Facturas() {
   const createFactura = useCreateFactura();
   const deleteFactura = useDeleteFactura();
   const registrarPago = useRegistrarPago();
+  const { role } = useAuth();
 
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState<string>('all');
@@ -74,8 +77,13 @@ export default function Facturas() {
           <h1 className="text-2xl font-bold">Facturas</h1>
           <p className="text-muted-foreground">{facturas.length} facturas</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nueva Factura</Button></DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => exportFacturasCSV(facturas)}>
+            <Download className="mr-2 h-4 w-4" />CSV
+          </Button>
+          {role === 'admin' && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nueva Factura</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nueva Factura</DialogTitle></DialogHeader>
             <div className="space-y-4">
@@ -91,7 +99,9 @@ export default function Facturas() {
               <Button className="w-full" onClick={handleCreate} disabled={createFactura.isPending}>Crear Factura</Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-3">
