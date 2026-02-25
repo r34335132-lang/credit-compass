@@ -7,9 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
+import { exportAsesoresCSV } from '@/lib/export';
 
 export default function Asesores() {
   const { data: asesores = [] } = useAsesores();
@@ -17,6 +19,7 @@ export default function Asesores() {
   const { data: facturas = [] } = useFacturas();
   const createAsesor = useCreateAsesor();
   const deleteAsesor = useDeleteAsesor();
+  const { role } = useAuth();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ nombre: '', email: '' });
@@ -40,8 +43,13 @@ export default function Asesores() {
           <h1 className="text-2xl font-bold">Asesores</h1>
           <p className="text-muted-foreground">{asesores.length} asesores</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nuevo Asesor</Button></DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => exportAsesoresCSV(asesorKPIs)}>
+            <Download className="mr-2 h-4 w-4" />CSV
+          </Button>
+          {role === 'admin' && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nuevo Asesor</Button></DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nuevo Asesor</DialogTitle></DialogHeader>
             <div className="space-y-4">
@@ -50,7 +58,9 @@ export default function Asesores() {
               <Button className="w-full" onClick={handleCreate} disabled={createAsesor.isPending}>Crear Asesor</Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+          )}
+        </div>
       </div>
 
       <Card>

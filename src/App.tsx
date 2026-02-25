@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Clientes from "@/pages/Clientes";
@@ -11,9 +12,32 @@ import Asesores from "@/pages/Asesores";
 import AsesorDetalle from "@/pages/AsesorDetalle";
 import Facturas from "@/pages/Facturas";
 import Alertas from "@/pages/Alertas";
+import Auth from "@/pages/Auth";
 import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (!user) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
+
+const AppRoutes = () => (
+  <Routes>
+    <Route path="/auth" element={<Auth />} />
+    <Route path="/" element={<ProtectedRoute><AppLayout><Dashboard /></AppLayout></ProtectedRoute>} />
+    <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clientes /></AppLayout></ProtectedRoute>} />
+    <Route path="/clientes/:id" element={<ProtectedRoute><AppLayout><ClienteDetalle /></AppLayout></ProtectedRoute>} />
+    <Route path="/asesores" element={<ProtectedRoute><AppLayout><Asesores /></AppLayout></ProtectedRoute>} />
+    <Route path="/asesores/:id" element={<ProtectedRoute><AppLayout><AsesorDetalle /></AppLayout></ProtectedRoute>} />
+    <Route path="/facturas" element={<ProtectedRoute><AppLayout><Facturas /></AppLayout></ProtectedRoute>} />
+    <Route path="/alertas" element={<ProtectedRoute><AppLayout><Alertas /></AppLayout></ProtectedRoute>} />
+    <Route path="*" element={<NotFound />} />
+  </Routes>
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -21,18 +45,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/clientes/:id" element={<ClienteDetalle />} />
-            <Route path="/asesores" element={<Asesores />} />
-            <Route path="/asesores/:id" element={<AsesorDetalle />} />
-            <Route path="/facturas" element={<Facturas />} />
-            <Route path="/alertas" element={<Alertas />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </AppLayout>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

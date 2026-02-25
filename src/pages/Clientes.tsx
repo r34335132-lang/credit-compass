@@ -10,10 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Search, Trash2, Download } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { RiskLevel } from '@/types';
+import { useAuth } from '@/hooks/useAuth';
+import { exportClientesCSV } from '@/lib/export';
 
 export default function Clientes() {
   const { data: clientes = [] } = useClientes();
@@ -21,6 +23,7 @@ export default function Clientes() {
   const { data: facturas = [] } = useFacturas();
   const createCliente = useCreateCliente();
   const deleteCliente = useDeleteCliente();
+  const { role } = useAuth();
 
   const [search, setSearch] = useState('');
   const [filterAsesor, setFilterAsesor] = useState<string>('all');
@@ -58,10 +61,15 @@ export default function Clientes() {
           <h1 className="text-2xl font-bold">Clientes</h1>
           <p className="text-muted-foreground">{clientes.length} clientes registrados</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" />Nuevo Cliente</Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => exportClientesCSV(clienteKPIs)}>
+            <Download className="mr-2 h-4 w-4" />CSV
+          </Button>
+          {role === 'admin' && (
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" />Nuevo Cliente</Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
             <div className="space-y-4">
@@ -76,7 +84,9 @@ export default function Clientes() {
               <Button className="w-full" onClick={handleCreate} disabled={createCliente.isPending}>Crear Cliente</Button>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -132,9 +142,11 @@ export default function Clientes() {
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.montoVencido)}</TableCell>
                   <TableCell className="text-right tabular-nums">{k.dpd}d</TableCell>
                   <TableCell>
+                    {role === 'admin' && (
                     <Button variant="ghost" size="icon" onClick={() => { deleteCliente.mutate(k.cliente.id); toast.success('Eliminado'); }}>
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               )) : (

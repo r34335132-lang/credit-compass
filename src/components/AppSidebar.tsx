@@ -1,5 +1,5 @@
 import { NavLink } from '@/components/NavLink';
-import { useLocation } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import {
   LayoutDashboard,
   Users,
@@ -7,6 +7,7 @@ import {
   FileText,
   AlertTriangle,
   CreditCard,
+  LogOut,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -18,20 +19,23 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  SidebarFooter,
   useSidebar,
 } from '@/components/ui/sidebar';
-
-const navItems = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
-  { title: 'Clientes', url: '/clientes', icon: Users },
-  { title: 'Asesores', url: '/asesores', icon: UserCheck },
-  { title: 'Facturas', url: '/facturas', icon: FileText },
-  { title: 'Alertas', url: '/alertas', icon: AlertTriangle },
-];
+import { Button } from '@/components/ui/button';
 
 export function AppSidebar() {
   const { state } = useSidebar();
+  const { role, user, signOut } = useAuth();
   const collapsed = state === 'collapsed';
+
+  const navItems = [
+    { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+    { title: 'Clientes', url: '/clientes', icon: Users },
+    ...(role === 'admin' ? [{ title: 'Asesores', url: '/asesores', icon: UserCheck }] : []),
+    { title: 'Facturas', url: '/facturas', icon: FileText },
+    { title: 'Alertas', url: '/alertas', icon: AlertTriangle },
+  ];
 
   return (
     <Sidebar collapsible="icon">
@@ -43,7 +47,9 @@ export function AppSidebar() {
           {!collapsed && (
             <div>
               <h2 className="text-sm font-bold text-sidebar-foreground">CreditPulse</h2>
-              <p className="text-xs text-sidebar-foreground/60">Gestión de Cartera</p>
+              <p className="text-xs text-sidebar-foreground/60">
+                {role === 'admin' ? 'Administrador' : 'Asesor'}
+              </p>
             </div>
           )}
         </div>
@@ -72,6 +78,20 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <SidebarFooter className="p-3">
+        {!collapsed && (
+          <p className="mb-2 truncate text-xs text-sidebar-foreground/60 px-2">{user?.email}</p>
+        )}
+        <Button
+          variant="ghost"
+          size={collapsed ? 'icon' : 'default'}
+          className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          onClick={signOut}
+        >
+          <LogOut className="h-4 w-4" />
+          {!collapsed && <span className="ml-2">Cerrar Sesión</span>}
+        </Button>
+      </SidebarFooter>
     </Sidebar>
   );
 }
