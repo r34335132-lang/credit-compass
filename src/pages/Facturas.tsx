@@ -116,6 +116,7 @@ export default function Facturas() {
             <SelectItem value="pendiente">Pendiente</SelectItem>
             <SelectItem value="vencida">Vencida</SelectItem>
             <SelectItem value="pagada">Pagada</SelectItem>
+            <SelectItem value="parcial">Parcial</SelectItem>
           </SelectContent>
         </Select>
       </div>

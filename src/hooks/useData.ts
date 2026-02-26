@@ -57,3 +57,53 @@ export function useRegistrarPago() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: ({ facturaId, fechaPago }: { facturaId: string; fechaPago: string }) => api.registrarPago(facturaId, fechaPago), onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
 }
+
+// Pagos
+export function usePagosByCliente(clienteId: string) {
+  return useQuery({ queryKey: ['pagos', clienteId], queryFn: () => api.fetchPagosByCliente(clienteId), enabled: !!clienteId });
+}
+
+export function useCreatePago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { factura_id: string; monto: number; fecha_pago: string; metodo: string; referencia?: string; registrado_por?: string }) => api.createPago(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos'] });
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+    },
+  });
+}
+
+// Notas de cobranza
+export function useNotasCobranza(clienteId: string) {
+  return useQuery({ queryKey: ['notas_cobranza', clienteId], queryFn: () => api.fetchNotasCobranza(clienteId), enabled: !!clienteId });
+}
+
+export function useCreateNotaCobranza() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { cliente_id: string; tipo: string; contenido: string; registrado_por?: string }) => api.createNotaCobranza(data),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['notas_cobranza', vars.cliente_id] }),
+  });
+}
+
+// Promesas de pago
+export function usePromesasPago(clienteId: string) {
+  return useQuery({ queryKey: ['promesas_pago', clienteId], queryFn: () => api.fetchPromesasPago(clienteId), enabled: !!clienteId });
+}
+
+export function useCreatePromesaPago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { cliente_id: string; factura_id?: string; monto_prometido: number; fecha_promesa: string; notas?: string; registrado_por?: string }) => api.createPromesaPago(data),
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['promesas_pago', vars.cliente_id] }),
+  });
+}
+
+export function useUpdatePromesaPago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; estado: string }) => api.updatePromesaPago(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['promesas_pago'] }),
+  });
+}
