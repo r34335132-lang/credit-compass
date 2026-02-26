@@ -41,25 +41,40 @@ export type Database = {
       clientes: {
         Row: {
           asesor_id: string | null
+          ciclo_facturacion: string
           created_at: string
+          dia_corte: number
+          dia_pago: number
+          estado_credito: string
           fecha_registro: string
           id: string
+          limite_dias_atraso_alerta: number
           linea_credito: number
           nombre: string
         }
         Insert: {
           asesor_id?: string | null
+          ciclo_facturacion?: string
           created_at?: string
+          dia_corte?: number
+          dia_pago?: number
+          estado_credito?: string
           fecha_registro?: string
           id?: string
+          limite_dias_atraso_alerta?: number
           linea_credito?: number
           nombre: string
         }
         Update: {
           asesor_id?: string | null
+          ciclo_facturacion?: string
           created_at?: string
+          dia_corte?: number
+          dia_pago?: number
+          estado_credito?: string
           fecha_registro?: string
           id?: string
+          limite_dias_atraso_alerta?: number
           linea_credito?: number
           nombre?: string
         }
@@ -77,32 +92,50 @@ export type Database = {
         Row: {
           cliente_id: string
           created_at: string
+          dias_gracia: number
+          dpd: number
           estado: string
           fecha_emision: string
           fecha_pago: string | null
           fecha_vencimiento: string
           id: string
           monto: number
+          notas_cobranza: string | null
+          numero_factura: string | null
+          periodo_facturacion: string | null
+          tipo: string
         }
         Insert: {
           cliente_id: string
           created_at?: string
+          dias_gracia?: number
+          dpd?: number
           estado?: string
           fecha_emision?: string
           fecha_pago?: string | null
           fecha_vencimiento: string
           id?: string
           monto: number
+          notas_cobranza?: string | null
+          numero_factura?: string | null
+          periodo_facturacion?: string | null
+          tipo?: string
         }
         Update: {
           cliente_id?: string
           created_at?: string
+          dias_gracia?: number
+          dpd?: number
           estado?: string
           fecha_emision?: string
           fecha_pago?: string | null
           fecha_vencimiento?: string
           id?: string
           monto?: number
+          notas_cobranza?: string | null
+          numero_factura?: string | null
+          periodo_facturacion?: string | null
+          tipo?: string
         }
         Relationships: [
           {
@@ -110,6 +143,133 @@ export type Database = {
             columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notas_cobranza: {
+        Row: {
+          cliente_id: string
+          contenido: string
+          created_at: string
+          id: string
+          registrado_por: string | null
+          tipo: string
+        }
+        Insert: {
+          cliente_id: string
+          contenido: string
+          created_at?: string
+          id?: string
+          registrado_por?: string | null
+          tipo?: string
+        }
+        Update: {
+          cliente_id?: string
+          contenido?: string
+          created_at?: string
+          id?: string
+          registrado_por?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notas_cobranza_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pagos: {
+        Row: {
+          created_at: string
+          factura_id: string
+          fecha_pago: string
+          id: string
+          metodo: string
+          monto: number
+          referencia: string | null
+          registrado_por: string | null
+        }
+        Insert: {
+          created_at?: string
+          factura_id: string
+          fecha_pago?: string
+          id?: string
+          metodo?: string
+          monto: number
+          referencia?: string | null
+          registrado_por?: string | null
+        }
+        Update: {
+          created_at?: string
+          factura_id?: string
+          fecha_pago?: string
+          id?: string
+          metodo?: string
+          monto?: number
+          referencia?: string | null
+          registrado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pagos_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promesas_pago: {
+        Row: {
+          cliente_id: string
+          created_at: string
+          estado: string
+          factura_id: string | null
+          fecha_promesa: string
+          id: string
+          monto_prometido: number
+          notas: string | null
+          registrado_por: string | null
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string
+          estado?: string
+          factura_id?: string | null
+          fecha_promesa: string
+          id?: string
+          monto_prometido: number
+          notas?: string | null
+          registrado_por?: string | null
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string
+          estado?: string
+          factura_id?: string | null
+          fecha_promesa?: string
+          id?: string
+          monto_prometido?: number
+          notas?: string | null
+          registrado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promesas_pago_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promesas_pago_factura_id_fkey"
+            columns: ["factura_id"]
+            isOneToOne: false
+            referencedRelation: "facturas"
             referencedColumns: ["id"]
           },
         ]
