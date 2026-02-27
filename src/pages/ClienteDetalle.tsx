@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useClientes, useAsesores, useFacturas, usePagosByCliente, useNotasCobranza, usePromesasPago, useCreatePago, useCreateNotaCobranza, useCreatePromesaPago, useUpdatePromesaPago } from '@/hooks/useData';
+import { useClientes, useAsesores, useFacturas, usePagosByCliente, useNotasCobranza, usePromesasPago, useCreatePago, useCreateNotaCobranza, useCreatePromesaPago, useUpdatePromesaPago, useHistorialBuro, useUpdateClienteEstadoCredito } from '@/hooks/useData';
 import { calcClienteKPI, calcPromesaKPI, formatCurrency, formatPercent } from '@/lib/kpi';
 import { useAuth } from '@/hooks/useAuth';
 import { RiskBadge } from '@/components/RiskBadge';
@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, DollarSign, Clock, TrendingDown, CreditCard, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText, Users } from 'lucide-react';
+import { ArrowLeft, DollarSign, Clock, TrendingDown, CreditCard, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText, Users, ShieldAlert, History } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -30,14 +30,19 @@ export default function ClienteDetalle() {
   const { data: notas = [] } = useNotasCobranza(id || '');
   const { data: promesas = [] } = usePromesasPago(id || '');
 
+  const { data: historialBuro = [] } = useHistorialBuro(id || '');
+
   const createPago = useCreatePago();
   const createNota = useCreateNotaCobranza();
   const createPromesa = useCreatePromesaPago();
   const updatePromesa = useUpdatePromesaPago();
+  const updateEstadoCredito = useUpdateClienteEstadoCredito();
 
   const [pagoDialog, setPagoDialog] = useState(false);
   const [notaDialog, setNotaDialog] = useState(false);
   const [promesaDialog, setPromesaDialog] = useState(false);
+  const [estadoCreditoDialog, setEstadoCreditoDialog] = useState(false);
+  const [estadoCreditoForm, setEstadoCreditoForm] = useState({ estado_credito: '' as 'activo' | 'riesgo' | 'buro' | '', motivo: '' });
   const [pagoForm, setPagoForm] = useState({ factura_id: '', monto: '', fecha_pago: new Date().toISOString().split('T')[0], referencia: '' });
   const [notaForm, setNotaForm] = useState({ tipo: 'nota', contenido: '' });
   const [promesaForm, setPromesaForm] = useState({ factura_id: '', monto_prometido: '', fecha_promesa: '', notas: '' });
@@ -63,8 +68,11 @@ export default function ClienteDetalle() {
   const asesor = asesores.find(a => a.id === cliente.asesor_id);
   const promesaKPI = calcPromesaKPI(promesas);
 
+  const isOriginador = cliente.tipo_cliente === 'grupo_originador';
+  const isBuro = cliente.estado_credito === 'buro';
+
   // Score de cobranza (0-100)
-  const scoreCobranza = Math.max(0, Math.min(100, Math.round(
+  const scoreCobranza = isBuro ? null : Math.max(0, Math.min(100, Math.round(
     (kpi.porcentajePagoATiempo * 0.4) +
     (Math.max(0, 100 - kpi.frecuenciaAtraso) * 0.3) +
     (Math.max(0, 100 - kpi.dpd * 5) * 0.3)
@@ -121,6 +129,22 @@ export default function ClienteDetalle() {
   }
   if (diasDesdeUltimoPago !== null && diasDesdeUltimoPago > 30) sugerencias.push('⏰ Más de 30 días sin pago: priorizar contacto.');
 
+  const handleUpdateEstadoCredito = async () => {
+    if (!estadoCreditoForm.estado_credito) { toast.error('Selecciona un estado'); return; }
+    if (estadoCreditoForm.estado_credito === 'buro' && !estadoCreditoForm.motivo.trim()) { toast.error('El motivo es requerido al cambiar a buro'); return; }
+    try {
+      await updateEstadoCredito.mutateAsync({
+        id: cliente.id,
+        estado_credito: estadoCreditoForm.estado_credito,
+        motivo: estadoCreditoForm.motivo.trim() || null,
+        registrado_por: user?.id || null,
+      });
+      toast.success('Estado de crédito actualizado');
+      setEstadoCreditoDialog(false);
+      setEstadoCreditoForm({ estado_credito: '', motivo: '' });
+    } catch { toast.error('Error al actualizar estado de crédito'); }
+  };
+
   const handleCreatePago = async () => {
     if (!pagoForm.factura_id || !pagoForm.monto || !pagoForm.fecha_pago) { toast.error('Factura, monto y fecha son requeridos'); return; }
     const factura = clienteFacturas.find(f => f.id === pagoForm.factura_id);
@@ -171,10 +195,15 @@ export default function ClienteDetalle() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold">{cliente.nombre}</h1>
             <RiskBadge risk={kpi.riesgo} dpd={kpi.dpd} size="lg" />
-            <Badge variant="outline" className={cliente.estado_credito === 'activo' ? 'border-risk-good text-risk-good' : 'border-risk-critical text-risk-critical'}>
-              {cliente.estado_credito}
-            </Badge>
-            {isGrupo && <Badge variant="outline" className="border-primary text-primary"><Users className="mr-1 h-3 w-3" />Grupo</Badge>}
+            {isBuro ? (
+              <Badge className="bg-destructive text-destructive-foreground">Buro</Badge>
+            ) : (
+              <Badge variant="outline" className={cliente.estado_credito === 'activo' ? 'border-risk-good text-risk-good' : 'border-risk-critical text-risk-critical'}>
+                {cliente.estado_credito}
+              </Badge>
+            )}
+            {isOriginador && <Badge className="bg-primary/10 text-primary border-primary/20">Originador</Badge>}
+            {isGrupo && !isOriginador && <Badge variant="outline" className="border-primary text-primary"><Users className="mr-1 h-3 w-3" />Grupo</Badge>}
           </div>
           <p className="text-muted-foreground">
             Asesor: {asesor?.nombre || 'Sin asignar'} · Ciclo: {cliente.ciclo_facturacion} · Corte: día {cliente.dia_corte} · Pago: día {cliente.dia_pago}
@@ -207,7 +236,7 @@ export default function ClienteDetalle() {
         <KPICard title="Monto Vencido" value={formatCurrency(kpi.montoVencido)} icon={TrendingDown} variant="danger" />
         <KPICard title="Saldo Pendiente" value={formatCurrency(kpi.saldoPendiente)} subtitle={`Uso línea: ${formatPercent(kpi.usoLinea)}`} icon={CreditCard} variant={kpi.usoLinea > 90 ? 'danger' : kpi.usoLinea > 70 ? 'warning' : 'good'} />
         <KPICard title="DPD Promedio" value={`${kpi.dpd} días`} icon={Clock} variant={kpi.dpd > 5 ? 'danger' : kpi.dpd > 2 ? 'warning' : 'good'} />
-        <KPICard title="Score Cobranza" value={`${scoreCobranza}/100`} icon={CreditCard} variant={scoreCobranza < 40 ? 'danger' : scoreCobranza < 70 ? 'warning' : 'good'} />
+        <KPICard title="Score Cobranza" value={scoreCobranza !== null ? `${scoreCobranza}/100` : 'N/A - Buro'} icon={CreditCard} variant={scoreCobranza === null ? 'danger' : scoreCobranza < 40 ? 'danger' : scoreCobranza < 70 ? 'warning' : 'good'} />
       </div>
 
       {/* Quick stats */}
@@ -235,6 +264,36 @@ export default function ClienteDetalle() {
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2">
+        {/* Estado Credito Dialog */}
+        <Dialog open={estadoCreditoDialog} onOpenChange={setEstadoCreditoDialog}>
+          <DialogTrigger asChild>
+            <Button variant="outline"><ShieldAlert className="mr-2 h-4 w-4" />Cambiar Estado Crédito</Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cambiar Estado de Crédito</DialogTitle>
+              <DialogDescription>Actualiza el estado crediticio del cliente. Estado actual: {cliente.estado_credito}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div><Label>Nuevo Estado</Label>
+                <Select value={estadoCreditoForm.estado_credito} onValueChange={v => setEstadoCreditoForm(f => ({ ...f, estado_credito: v as 'activo' | 'riesgo' | 'buro' }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar estado" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="activo">Activo</SelectItem>
+                    <SelectItem value="riesgo">Riesgo</SelectItem>
+                    <SelectItem value="buro">Buro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div><Label>Motivo {estadoCreditoForm.estado_credito === 'buro' && <span className="text-destructive">*</span>}</Label>
+                <Textarea value={estadoCreditoForm.motivo} onChange={e => setEstadoCreditoForm(f => ({ ...f, motivo: e.target.value }))} placeholder="Motivo del cambio de estado..." />
+              </div>
+              <Button className="w-full" onClick={handleUpdateEstadoCredito} disabled={updateEstadoCredito.isPending}>Actualizar Estado</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {!isOriginador && (
         <Dialog open={pagoDialog} onOpenChange={setPagoDialog}>
           <DialogTrigger asChild><Button><DollarSign className="mr-2 h-4 w-4" />Registrar Pago</Button></DialogTrigger>
           <DialogContent>
@@ -273,7 +332,9 @@ export default function ClienteDetalle() {
             </div>
           </DialogContent>
         </Dialog>
+        )}
 
+        {!isOriginador && (
         <Dialog open={promesaDialog} onOpenChange={setPromesaDialog}>
           <DialogTrigger asChild><Button variant="outline"><Handshake className="mr-2 h-4 w-4" />Promesa de Pago</Button></DialogTrigger>
           <DialogContent>
@@ -298,6 +359,7 @@ export default function ClienteDetalle() {
             </div>
           </DialogContent>
         </Dialog>
+        )}
 
         <Dialog open={notaDialog} onOpenChange={setNotaDialog}>
           <DialogTrigger asChild><Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Registrar Contacto</Button></DialogTrigger>
@@ -331,6 +393,7 @@ export default function ClienteDetalle() {
           <TabsTrigger value="facturas"><FileText className="mr-1.5 h-4 w-4" />Facturas</TabsTrigger>
           <TabsTrigger value="pagos"><DollarSign className="mr-1.5 h-4 w-4" />Pagos</TabsTrigger>
           <TabsTrigger value="promesas"><Handshake className="mr-1.5 h-4 w-4" />Promesas</TabsTrigger>
+          <TabsTrigger value="historial_buro"><History className="mr-1.5 h-4 w-4" />Historial Buro</TabsTrigger>
         </TabsList>
 
         <TabsContent value="timeline">
@@ -479,8 +542,47 @@ export default function ClienteDetalle() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="historial_buro">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Historial de Cambios de Estado Crediticio</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Cambio</TableHead>
+                    <TableHead>Motivo</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {historialBuro.map(h => (
+                    <TableRow key={h.id}>
+                      <TableCell>{format(parseISO(h.created_at), 'dd/MM/yy HH:mm')}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">{h.estado_anterior}</Badge>
+                          <span className="text-muted-foreground">{'→'}</span>
+                          <Badge className={h.estado_nuevo === 'buro' ? 'bg-destructive/10 text-destructive border-destructive/20 text-xs' : h.estado_nuevo === 'activo' ? 'bg-risk-good-bg text-risk-good text-xs' : 'bg-risk-bad-bg text-risk-bad text-xs'}>
+                            {h.estado_nuevo}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground max-w-[300px]">{h.motivo || '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                  {historialBuro.length === 0 && (
+                    <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">Sin cambios de estado registrados</TableCell></TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
+
+
 
