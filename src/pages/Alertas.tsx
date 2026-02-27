@@ -1,5 +1,5 @@
 import { useClientes, useAsesores, useFacturas } from '@/hooks/useData';
-import { generateAlertas, calcClienteKPI, formatCurrency } from '@/lib/kpi';
+import { generateAlertas, getClienteKPIEffective, formatCurrency } from '@/lib/kpi';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,7 +13,7 @@ export default function Alertas() {
 
   const alertas = generateAlertas(clientes, asesores, facturas);
   const clientesBuro = clientes.filter(c => c.estado_credito === 'buro');
-  const buroKPIs = clientesBuro.map(c => calcClienteKPI(c, facturas));
+  const buroKPIs = clientesBuro.map(c => getClienteKPIEffective(c, clientes, facturas));
 
   return (
     <div className="space-y-6 animate-fade-in">

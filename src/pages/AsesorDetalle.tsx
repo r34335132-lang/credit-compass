@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useAsesores, useClientes, useFacturas } from '@/hooks/useData';
-import { calcAsesorKPI, calcClienteKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { calcAsesorKPI, getClienteKPIEffective, formatCurrency, formatPercent } from '@/lib/kpi';
 import { RiskBadge } from '@/components/RiskBadge';
 import { KPICard } from '@/components/KPICard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +18,7 @@ export default function AsesorDetalle() {
 
   const kpi = calcAsesorKPI(asesor, clientes, facturas);
   const asesorClientes = clientes.filter(c => c.asesor_id === asesor.id);
-  const clienteKPIs = asesorClientes.map(c => calcClienteKPI(c, facturas));
+  const clienteKPIs = asesorClientes.map(c => getClienteKPIEffective(c, clientes, facturas));
 
   return (
     <div className="space-y-6 animate-fade-in">

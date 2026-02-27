@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useClientes, useAsesores, useFacturas, useAllPromesas } from '@/hooks/useData';
-import { calcClienteKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
+import { getClienteKPIEffective, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DollarSign, TrendingDown, AlertTriangle, Clock, Handshake, ArrowLeft } from 'lucide-react';
@@ -15,7 +15,7 @@ export default function VistaJunta() {
   const { data: allPromesas = [] } = useAllPromesas();
 
   const data = useMemo(() => {
-    const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
+    const clienteKPIs = clientes.map(c => getClienteKPIEffective(c, clientes, facturas));
     const alertas = generateAlertas(clientes, asesores, facturas);
     const promesaKPI = calcPromesaKPI(allPromesas);
     const totalCartera = facturas.reduce((s, f) => s + f.monto, 0);

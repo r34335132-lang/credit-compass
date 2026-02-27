@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useClientes, useAsesores, useFacturas, useAllPromesas } from '@/hooks/useData';
-import { calcClienteKPI, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
+import { getClienteKPIEffective, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
 import { KPICard } from '@/components/KPICard';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,7 +30,7 @@ export default function Dashboard() {
   const kpis = useMemo(() => {
     if (!clientes || !asesores || !facturas) return null;
     
-    const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
+    const clienteKPIs = clientes.map(c => getClienteKPIEffective(c, clientes, facturas));
     const asesorKPIs = asesores.map(a => calcAsesorKPI(a, clientes, facturas));
     const alertas = generateAlertas(clientes, asesores, facturas);
     const promesaKPI = calcPromesaKPI(allPromesas);

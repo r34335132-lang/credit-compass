@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useClientes, useAsesores, useFacturas, usePagosByCliente, useNotasCobranza, usePromesasPago, useCreatePago, useCreateNotaCobranza, useCreatePromesaPago, useUpdatePromesaPago, useHistorialBuro, useUpdateClienteEstadoCredito } from '@/hooks/useData';
-import { calcClienteKPI, calcPromesaKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { getClienteKPIEffective, calcPromesaKPI, formatCurrency, formatPercent } from '@/lib/kpi';
 import { useAuth } from '@/hooks/useAuth';
 import { RiskBadge } from '@/components/RiskBadge';
 import { KPICard } from '@/components/KPICard';
@@ -57,14 +57,14 @@ export default function ClienteDetalle() {
   const isGrupo = cliente.es_grupo || subClientes.length > 0;
   const grupoClienteIds = isGrupo ? [cliente.id, ...subClientes.map(c => c.id)] : [cliente.id];
   
-  const effectiveFacturas = viewMode === 'grupo' && isGrupo
-    ? facturas.filter(f => grupoClienteIds.includes(f.cliente_id))
-    : facturas;
+  const showConsolidated = (viewMode === 'grupo' && isGrupo) || (isGrupo && viewMode === 'individual');
 
-  const kpi = calcClienteKPI(cliente, effectiveFacturas, pagos.map(p => ({ factura_id: p.factura_id, monto: Number(p.monto) })));
-  const clienteFacturas = effectiveFacturas.filter(f => 
-    viewMode === 'grupo' && isGrupo ? grupoClienteIds.includes(f.cliente_id) : f.cliente_id === cliente.id
-  );
+  // KPI: use getClienteKPIEffective which automatically aggregates sub-clients for grupo parents
+  const kpi = getClienteKPIEffective(cliente, clientes, facturas, pagos.map(p => ({ factura_id: p.factura_id, monto: Number(p.monto) })));
+  
+  const clienteFacturas = isGrupo
+    ? facturas.filter(f => grupoClienteIds.includes(f.cliente_id))
+    : facturas.filter(f => f.cliente_id === cliente.id);
   const asesor = asesores.find(a => a.id === cliente.asesor_id);
   const promesaKPI = calcPromesaKPI(promesas);
 
