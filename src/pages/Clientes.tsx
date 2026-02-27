@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useClientes, useAsesores, useCreateCliente, useDeleteCliente, useUpdateCliente, useFacturas } from '@/hooks/useData';
-import { calcClienteKPI, calcGrupoKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { getClienteKPIEffective, formatCurrency, formatPercent } from '@/lib/kpi';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -37,7 +37,7 @@ export default function Clientes() {
   const [form, setForm] = useState({ nombre: '', asesor_id: '', linea_credito: '', es_grupo: false, parent_cliente_id: '', tipo_cliente: 'normal' as 'normal' | 'grupo_originador' });
   const [grupoForm, setGrupoForm] = useState({ cliente_id: '', parent_cliente_id: '' });
 
-  const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
+  const clienteKPIs = clientes.map(c => getClienteKPIEffective(c, clientes, facturas));
 
   // Filter logic: in group mode, show only parent groups with consolidated KPIs
   const grupos = clientes.filter(c => c.es_grupo || clientes.some(sc => sc.parent_cliente_id === c.id));
@@ -53,16 +53,6 @@ export default function Clientes() {
     if (filterEstadoCredito !== 'all' && k.cliente.estado_credito !== filterEstadoCredito) return false;
     return true;
   });
-
-  // Consolidated KPI for grupos
-  const getConsolidatedKPI = (parentId: string) => {
-    const subs = clientes.filter(c => c.parent_cliente_id === parentId);
-    const allIds = [parentId, ...subs.map(c => c.id)];
-    const groupFacturas = facturas.filter(f => allIds.includes(f.cliente_id));
-    const totalFacturado = groupFacturas.reduce((s, f) => s + f.monto, 0);
-    const montoVencido = groupFacturas.filter(f => f.estado === 'vencida' || f.estado === 'parcial').reduce((s, f) => s + f.monto, 0);
-    return { totalFacturado, montoVencido, subCount: subs.length };
-  };
 
   const handleCreate = async () => {
     if (!form.nombre) { toast.error('Nombre es requerido'); return; }
@@ -294,4 +284,5 @@ export default function Clientes() {
     </div>
   );
 }
+
 
