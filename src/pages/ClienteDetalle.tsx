@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, DollarSign, Clock, TrendingDown, CreditCard, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText, Users } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
@@ -153,7 +153,7 @@ export default function ClienteDetalle() {
   const handleCreatePromesa = async () => {
     if (!promesaForm.monto_prometido || !promesaForm.fecha_promesa) { toast.error('Monto y fecha son requeridos'); return; }
     try {
-      await createPromesa.mutateAsync({ cliente_id: cliente.id, factura_id: promesaForm.factura_id || undefined, monto_prometido: Number(promesaForm.monto_prometido), fecha_promesa: promesaForm.fecha_promesa, notas: promesaForm.notas || undefined, registrado_por: user?.id });
+      await createPromesa.mutateAsync({ cliente_id: cliente.id, factura_id: promesaForm.factura_id && promesaForm.factura_id !== '__none__' ? promesaForm.factura_id : undefined, monto_prometido: Number(promesaForm.monto_prometido), fecha_promesa: promesaForm.fecha_promesa, notas: promesaForm.notas || undefined, registrado_por: user?.id });
       toast.success('Promesa registrada');
       setPromesaDialog(false);
       setPromesaForm({ factura_id: '', monto_prometido: '', fecha_promesa: '', notas: '' });
@@ -238,7 +238,10 @@ export default function ClienteDetalle() {
         <Dialog open={pagoDialog} onOpenChange={setPagoDialog}>
           <DialogTrigger asChild><Button><DollarSign className="mr-2 h-4 w-4" />Registrar Pago</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Registrar Pago</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Registrar Pago</DialogTitle>
+              <DialogDescription>Registra un pago parcial o total para una factura pendiente.</DialogDescription>
+            </DialogHeader>
             <div className="space-y-4">
               <div><Label>Factura (por folio)</Label>
                 <Select value={pagoForm.factura_id} onValueChange={v => {
@@ -246,11 +249,16 @@ export default function ClienteDetalle() {
                   setPagoForm(f => ({ ...f, factura_id: v, monto: fac ? String(getSaldoFactura(fac.id, fac.monto)) : '' }));
                 }}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar factura" /></SelectTrigger>
-                  <SelectContent>{pendientesFacturas.map(f => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.numero_factura || '—'} · {formatCurrency(f.monto)} · Saldo: {formatCurrency(getSaldoFactura(f.id, f.monto))} ({f.estado})
-                    </SelectItem>
-                  ))}</SelectContent>
+                  <SelectContent>
+                    {pendientesFacturas.length > 0
+                      ? pendientesFacturas.map(f => (
+                          <SelectItem key={f.id} value={f.id}>
+                            {f.numero_factura || '\u2014'} · {formatCurrency(f.monto)} · Saldo: {formatCurrency(getSaldoFactura(f.id, f.monto))} ({f.estado})
+                          </SelectItem>
+                        ))
+                      : <p className="py-4 text-center text-sm text-muted-foreground">No hay facturas pendientes</p>
+                    }
+                  </SelectContent>
                 </Select>
               </div>
               <div><Label>Monto</Label>
@@ -269,14 +277,20 @@ export default function ClienteDetalle() {
         <Dialog open={promesaDialog} onOpenChange={setPromesaDialog}>
           <DialogTrigger asChild><Button variant="outline"><Handshake className="mr-2 h-4 w-4" />Promesa de Pago</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Registrar Promesa de Pago</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Registrar Promesa de Pago</DialogTitle>
+              <DialogDescription>Registra una promesa de pago del cliente.</DialogDescription>
+            </DialogHeader>
             <div className="space-y-4">
               <div><Label>Monto Prometido</Label><Input type="number" value={promesaForm.monto_prometido} onChange={e => setPromesaForm(f => ({ ...f, monto_prometido: e.target.value }))} /></div>
               <div><Label>Fecha Promesa</Label><Input type="date" value={promesaForm.fecha_promesa} onChange={e => setPromesaForm(f => ({ ...f, fecha_promesa: e.target.value }))} /></div>
               <div><Label>Factura (opcional)</Label>
-                <Select value={promesaForm.factura_id} onValueChange={v => setPromesaForm(f => ({ ...f, factura_id: v }))}>
+                <Select value={promesaForm.factura_id || '__none__'} onValueChange={v => setPromesaForm(f => ({ ...f, factura_id: v === '__none__' ? '' : v }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>{pendientesFacturas.map(f => <SelectItem key={f.id} value={f.id}>{f.numero_factura || '—'} · {formatCurrency(f.monto)} - {f.fecha_vencimiento}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin factura</SelectItem>
+                    {pendientesFacturas.map(f => <SelectItem key={f.id} value={f.id}>{f.numero_factura || '\u2014'} · {formatCurrency(f.monto)} - {f.fecha_vencimiento}</SelectItem>)}
+                  </SelectContent>
                 </Select>
               </div>
               <div><Label>Notas</Label><Textarea value={promesaForm.notas} onChange={e => setPromesaForm(f => ({ ...f, notas: e.target.value }))} placeholder="Opcional" /></div>
@@ -288,7 +302,10 @@ export default function ClienteDetalle() {
         <Dialog open={notaDialog} onOpenChange={setNotaDialog}>
           <DialogTrigger asChild><Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Registrar Contacto</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Registrar Nota / Contacto</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Registrar Nota / Contacto</DialogTitle>
+              <DialogDescription>Registra una nota de cobranza o contacto realizado.</DialogDescription>
+            </DialogHeader>
             <div className="space-y-4">
               <div><Label>Tipo</Label>
                 <Select value={notaForm.tipo} onValueChange={v => setNotaForm(f => ({ ...f, tipo: v }))}>
@@ -466,3 +483,4 @@ export default function ClienteDetalle() {
     </div>
   );
 }
+
