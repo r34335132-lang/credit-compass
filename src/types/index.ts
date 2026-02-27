@@ -19,6 +19,8 @@ export interface Cliente {
   dia_pago: number;
   limite_dias_atraso_alerta: number;
   estado_credito: string;
+  parent_cliente_id: string | null;
+  es_grupo: boolean;
   asesor?: Asesor;
 }
 
@@ -76,6 +78,7 @@ export interface ClienteKPI {
   cliente: Cliente;
   totalFacturado: number;
   montoVencido: number;
+  saldoPendiente: number;
   porcentajePagoATiempo: number;
   dpd: number;
   frecuenciaAtraso: number;
@@ -91,6 +94,14 @@ export interface AsesorKPI {
   promedioDPD: number;
   clientesEnRiesgo: number;
   totalClientes: number;
+}
+
+export interface PromesaKPI {
+  total: number;
+  cumplidas: number;
+  incumplidas: number;
+  pendientes: number;
+  porcentajeCumplimiento: number;
 }
 
 export interface Alerta {

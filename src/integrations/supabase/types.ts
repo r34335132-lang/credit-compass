@@ -45,12 +45,14 @@ export type Database = {
           created_at: string
           dia_corte: number
           dia_pago: number
+          es_grupo: boolean
           estado_credito: string
           fecha_registro: string
           id: string
           limite_dias_atraso_alerta: number
           linea_credito: number
           nombre: string
+          parent_cliente_id: string | null
         }
         Insert: {
           asesor_id?: string | null
@@ -58,12 +60,14 @@ export type Database = {
           created_at?: string
           dia_corte?: number
           dia_pago?: number
+          es_grupo?: boolean
           estado_credito?: string
           fecha_registro?: string
           id?: string
           limite_dias_atraso_alerta?: number
           linea_credito?: number
           nombre: string
+          parent_cliente_id?: string | null
         }
         Update: {
           asesor_id?: string | null
@@ -71,12 +75,14 @@ export type Database = {
           created_at?: string
           dia_corte?: number
           dia_pago?: number
+          es_grupo?: boolean
           estado_credito?: string
           fecha_registro?: string
           id?: string
           limite_dias_atraso_alerta?: number
           linea_credito?: number
           nombre?: string
+          parent_cliente_id?: string | null
         }
         Relationships: [
           {
@@ -84,6 +90,13 @@ export type Database = {
             columns: ["asesor_id"]
             isOneToOne: false
             referencedRelation: "asesores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_parent_cliente_id_fkey"
+            columns: ["parent_cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
             referencedColumns: ["id"]
           },
         ]

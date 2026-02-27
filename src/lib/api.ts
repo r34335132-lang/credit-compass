@@ -32,13 +32,13 @@ export async function fetchClientes(): Promise<Cliente[]> {
   return data as unknown as Cliente[];
 }
 
-export async function createCliente(cliente: { nombre: string; asesor_id: string | null; linea_credito: number }) {
+export async function createCliente(cliente: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean }) {
   const { data, error } = await supabase.from('clientes').insert(cliente).select().single();
   if (error) throw error;
   return data;
 }
 
-export async function updateCliente(id: string, cliente: { nombre: string; asesor_id: string | null; linea_credito: number }) {
+export async function updateCliente(id: string, cliente: { nombre?: string; asesor_id?: string | null; linea_credito?: number; parent_cliente_id?: string | null; es_grupo?: boolean }) {
   const { data, error } = await supabase.from('clientes').update(cliente).eq('id', id).select().single();
   if (error) throw error;
   return data;
@@ -56,7 +56,7 @@ export async function fetchFacturas(): Promise<Factura[]> {
   return data as unknown as Factura[];
 }
 
-export async function createFactura(factura: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string }) {
+export async function createFactura(factura: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string; numero_factura?: string }) {
   const { data, error } = await supabase.from('facturas').insert(factura).select().single();
   if (error) throw error;
   return data;
@@ -93,8 +93,13 @@ export async function fetchPagos(facturaId?: string): Promise<Pago[]> {
   return data as Pago[];
 }
 
+export async function fetchAllPagos(): Promise<Pago[]> {
+  const { data, error } = await supabase.from('pagos').select('*').order('fecha_pago', { ascending: false });
+  if (error) throw error;
+  return data as Pago[];
+}
+
 export async function fetchPagosByCliente(clienteId: string): Promise<Pago[]> {
-  // Get all factura IDs for this client first
   const { data: facturas, error: fError } = await supabase.from('facturas').select('id').eq('cliente_id', clienteId);
   if (fError) throw fError;
   if (!facturas || facturas.length === 0) return [];
@@ -104,8 +109,8 @@ export async function fetchPagosByCliente(clienteId: string): Promise<Pago[]> {
   return data as Pago[];
 }
 
-export async function createPago(pago: { factura_id: string; monto: number; fecha_pago: string; metodo: string; referencia?: string; registrado_por?: string }) {
-  const { data, error } = await supabase.from('pagos').insert(pago).select().single();
+export async function createPago(pago: { factura_id: string; monto: number; fecha_pago: string; referencia?: string; registrado_por?: string }) {
+  const { data, error } = await supabase.from('pagos').insert({ ...pago, metodo: 'transferencia' }).select().single();
   if (error) throw error;
   return data;
 }
@@ -126,6 +131,12 @@ export async function createNotaCobranza(nota: { cliente_id: string; tipo: strin
 // Promesas de pago
 export async function fetchPromesasPago(clienteId: string): Promise<PromesaPago[]> {
   const { data, error } = await supabase.from('promesas_pago').select('*').eq('cliente_id', clienteId).order('fecha_promesa', { ascending: false });
+  if (error) throw error;
+  return data as PromesaPago[];
+}
+
+export async function fetchAllPromesas(): Promise<PromesaPago[]> {
+  const { data, error } = await supabase.from('promesas_pago').select('*').order('fecha_promesa', { ascending: false });
   if (error) throw error;
   return data as PromesaPago[];
 }

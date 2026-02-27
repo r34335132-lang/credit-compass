@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useClientes, useAsesores, useFacturas, usePagosByCliente, useNotasCobranza, usePromesasPago, useCreatePago, useCreateNotaCobranza, useCreatePromesaPago, useUpdatePromesaPago } from '@/hooks/useData';
-import { calcClienteKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { calcClienteKPI, calcPromesaKPI, formatCurrency, formatPercent } from '@/lib/kpi';
 import { useAuth } from '@/hooks/useAuth';
 import { RiskBadge } from '@/components/RiskBadge';
 import { KPICard } from '@/components/KPICard';
@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, DollarSign, Clock, TrendingUp, CreditCard, Plus, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
+import { ArrowLeft, DollarSign, Clock, TrendingDown, CreditCard, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText, Users } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -38,16 +38,30 @@ export default function ClienteDetalle() {
   const [pagoDialog, setPagoDialog] = useState(false);
   const [notaDialog, setNotaDialog] = useState(false);
   const [promesaDialog, setPromesaDialog] = useState(false);
-  const [pagoForm, setPagoForm] = useState({ factura_id: '', monto: '', metodo: 'transferencia', referencia: '' });
+  const [pagoForm, setPagoForm] = useState({ factura_id: '', monto: '', fecha_pago: new Date().toISOString().split('T')[0], referencia: '' });
   const [notaForm, setNotaForm] = useState({ tipo: 'nota', contenido: '' });
   const [promesaForm, setPromesaForm] = useState({ factura_id: '', monto_prometido: '', fecha_promesa: '', notas: '' });
+  const [viewMode, setViewMode] = useState<'individual' | 'grupo'>('individual');
 
   const cliente = clientes.find(c => c.id === id);
   if (!cliente) return <div className="py-12 text-center text-muted-foreground">Cliente no encontrado</div>;
 
-  const kpi = calcClienteKPI(cliente, facturas);
-  const clienteFacturas = facturas.filter(f => f.cliente_id === cliente.id);
+  // Group logic
+  const subClientes = clientes.filter(c => c.parent_cliente_id === cliente.id);
+  const parentCliente = cliente.parent_cliente_id ? clientes.find(c => c.id === cliente.parent_cliente_id) : null;
+  const isGrupo = cliente.es_grupo || subClientes.length > 0;
+  const grupoClienteIds = isGrupo ? [cliente.id, ...subClientes.map(c => c.id)] : [cliente.id];
+  
+  const effectiveFacturas = viewMode === 'grupo' && isGrupo
+    ? facturas.filter(f => grupoClienteIds.includes(f.cliente_id))
+    : facturas;
+
+  const kpi = calcClienteKPI(cliente, effectiveFacturas, pagos.map(p => ({ factura_id: p.factura_id, monto: Number(p.monto) })));
+  const clienteFacturas = effectiveFacturas.filter(f => 
+    viewMode === 'grupo' && isGrupo ? grupoClienteIds.includes(f.cliente_id) : f.cliente_id === cliente.id
+  );
   const asesor = asesores.find(a => a.id === cliente.asesor_id);
+  const promesaKPI = calcPromesaKPI(promesas);
 
   // Score de cobranza (0-100)
   const scoreCobranza = Math.max(0, Math.min(100, Math.round(
@@ -56,22 +70,26 @@ export default function ClienteDetalle() {
     (Math.max(0, 100 - kpi.dpd * 5) * 0.3)
   )));
 
-  // Monto recuperado
   const montoRecuperado = pagos.reduce((s, p) => s + Number(p.monto), 0);
-
-  // Días desde último pago
   const ultimoPago = pagos.length > 0 ? pagos[0] : null;
   const diasDesdeUltimoPago = ultimoPago ? differenceInDays(new Date(), parseISO(ultimoPago.fecha_pago)) : null;
-
-  // Promesas activas
   const promesasActivas = promesas.filter(p => p.estado === 'pendiente');
+
+  // Saldo por factura helper
+  const getSaldoFactura = (facturaId: string, montoFactura: number) => {
+    const totalPagado = pagos.filter(p => p.factura_id === facturaId).reduce((s, p) => s + Number(p.monto), 0);
+    return Math.max(0, montoFactura - totalPagado);
+  };
 
   // Timeline events
   const timelineEvents = [
-    ...pagos.map(p => ({ type: 'pago' as const, date: p.fecha_pago, title: `Pago: ${formatCurrency(Number(p.monto))}`, subtitle: `${p.metodo}${p.referencia ? ` · Ref: ${p.referencia}` : ''}`, id: p.id })),
+    ...pagos.map(p => {
+      const fac = clienteFacturas.find(f => f.id === p.factura_id);
+      return { type: 'pago' as const, date: p.fecha_pago, title: `Pago: ${formatCurrency(Number(p.monto))}`, subtitle: `Folio: ${fac?.numero_factura || '—'}${p.referencia ? ` · Ref: ${p.referencia}` : ''}`, id: p.id };
+    }),
     ...notas.map(n => ({ type: 'nota' as const, date: n.created_at.split('T')[0], title: n.tipo === 'contacto' ? 'Contacto registrado' : 'Nota de cobranza', subtitle: n.contenido, id: n.id })),
     ...promesas.map(p => ({ type: 'promesa' as const, date: p.fecha_promesa, title: `Promesa: ${formatCurrency(Number(p.monto_prometido))}`, subtitle: `${p.estado}${p.notas ? ` · ${p.notas}` : ''}`, id: p.id })),
-    ...clienteFacturas.map(f => ({ type: 'factura' as const, date: f.fecha_emision, title: `Factura: ${formatCurrency(f.monto)}`, subtitle: `Vence: ${f.fecha_vencimiento} · ${f.estado}`, id: f.id })),
+    ...clienteFacturas.map(f => ({ type: 'factura' as const, date: f.fecha_emision, title: `Factura ${f.numero_factura || ''}: ${formatCurrency(f.monto)}`, subtitle: `Vence: ${f.fecha_vencimiento} · ${f.estado}`, id: f.id })),
   ].sort((a, b) => b.date.localeCompare(a.date));
 
   const estadoColor = (estado: string) => {
@@ -104,12 +122,21 @@ export default function ClienteDetalle() {
   if (diasDesdeUltimoPago !== null && diasDesdeUltimoPago > 30) sugerencias.push('⏰ Más de 30 días sin pago: priorizar contacto.');
 
   const handleCreatePago = async () => {
-    if (!pagoForm.factura_id || !pagoForm.monto) { toast.error('Factura y monto son requeridos'); return; }
+    if (!pagoForm.factura_id || !pagoForm.monto || !pagoForm.fecha_pago) { toast.error('Factura, monto y fecha son requeridos'); return; }
+    const factura = clienteFacturas.find(f => f.id === pagoForm.factura_id);
+    if (!factura) { toast.error('Factura no encontrada'); return; }
+    const saldo = getSaldoFactura(factura.id, factura.monto);
+    const montoPago = Number(pagoForm.monto);
+    if (montoPago <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
+    if (montoPago > saldo) { toast.error(`El monto excede el saldo pendiente (${formatCurrency(saldo)})`); return; }
+    // Check duplicate
+    const existeDuplicado = pagos.some(p => p.factura_id === pagoForm.factura_id && Number(p.monto) === montoPago && p.fecha_pago === pagoForm.fecha_pago);
+    if (existeDuplicado) { toast.error('Ya existe un pago idéntico. Verifica los datos.'); return; }
     try {
-      await createPago.mutateAsync({ factura_id: pagoForm.factura_id, monto: Number(pagoForm.monto), fecha_pago: new Date().toISOString().split('T')[0], metodo: pagoForm.metodo, referencia: pagoForm.referencia || undefined, registrado_por: user?.id });
+      await createPago.mutateAsync({ factura_id: pagoForm.factura_id, monto: montoPago, fecha_pago: pagoForm.fecha_pago, referencia: pagoForm.referencia || undefined, registrado_por: user?.id });
       toast.success('Pago registrado');
       setPagoDialog(false);
-      setPagoForm({ factura_id: '', monto: '', metodo: 'transferencia', referencia: '' });
+      setPagoForm({ factura_id: '', monto: '', fecha_pago: new Date().toISOString().split('T')[0], referencia: '' });
     } catch { toast.error('Error al registrar pago'); }
   };
 
@@ -147,27 +174,47 @@ export default function ClienteDetalle() {
             <Badge variant="outline" className={cliente.estado_credito === 'activo' ? 'border-risk-good text-risk-good' : 'border-risk-critical text-risk-critical'}>
               {cliente.estado_credito}
             </Badge>
+            {isGrupo && <Badge variant="outline" className="border-primary text-primary"><Users className="mr-1 h-3 w-3" />Grupo</Badge>}
           </div>
           <p className="text-muted-foreground">
             Asesor: {asesor?.nombre || 'Sin asignar'} · Ciclo: {cliente.ciclo_facturacion} · Corte: día {cliente.dia_corte} · Pago: día {cliente.dia_pago}
+            {parentCliente && <> · Grupo: <Link to={`/clientes/${parentCliente.id}`} className="text-primary hover:underline">{parentCliente.nombre}</Link></>}
           </p>
         </div>
+        {isGrupo && (
+          <div className="flex gap-1 rounded-lg border p-1">
+            <Button size="sm" variant={viewMode === 'individual' ? 'default' : 'ghost'} onClick={() => setViewMode('individual')}>Individual</Button>
+            <Button size="sm" variant={viewMode === 'grupo' ? 'default' : 'ghost'} onClick={() => setViewMode('grupo')}>Consolidado</Button>
+          </div>
+        )}
       </div>
+
+      {/* Sub-clientes */}
+      {isGrupo && subClientes.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <span className="text-sm text-muted-foreground self-center">Sub-clientes:</span>
+          {subClientes.map(sc => (
+            <Link key={sc.id} to={`/clientes/${sc.id}`}>
+              <Badge variant="outline" className="hover:bg-accent cursor-pointer">{sc.nombre}</Badge>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <KPICard title="Total Facturado" value={formatCurrency(kpi.totalFacturado)} icon={DollarSign} />
-        <KPICard title="Monto Vencido" value={formatCurrency(kpi.montoVencido)} icon={TrendingUp} variant="danger" />
+        <KPICard title="Monto Vencido" value={formatCurrency(kpi.montoVencido)} icon={TrendingDown} variant="danger" />
+        <KPICard title="Saldo Pendiente" value={formatCurrency(kpi.saldoPendiente)} subtitle={`Uso línea: ${formatPercent(kpi.usoLinea)}`} icon={CreditCard} variant={kpi.usoLinea > 90 ? 'danger' : kpi.usoLinea > 70 ? 'warning' : 'good'} />
         <KPICard title="DPD Promedio" value={`${kpi.dpd} días`} icon={Clock} variant={kpi.dpd > 5 ? 'danger' : kpi.dpd > 2 ? 'warning' : 'good'} />
         <KPICard title="Score Cobranza" value={`${scoreCobranza}/100`} icon={CreditCard} variant={scoreCobranza < 40 ? 'danger' : scoreCobranza < 70 ? 'warning' : 'good'} />
-        <KPICard title="Recuperado" value={formatCurrency(montoRecuperado)} subtitle={diasDesdeUltimoPago !== null ? `Último pago: ${diasDesdeUltimoPago}d` : 'Sin pagos'} icon={DollarSign} variant="good" />
       </div>
 
       {/* Quick stats */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Puntualidad</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{formatPercent(kpi.porcentajePagoATiempo)}</p></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Uso de Línea</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{formatPercent(kpi.usoLinea)}</p><p className="text-xs text-muted-foreground">Línea: {formatCurrency(cliente.linea_credito)}</p></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Promesas Activas</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{promesasActivas.length}</p></CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Recuperado</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{formatCurrency(montoRecuperado)}</p><p className="text-xs text-muted-foreground">{diasDesdeUltimoPago !== null ? `Último pago: ${diasDesdeUltimoPago}d` : 'Sin pagos'}</p></CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Promesas</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{promesaKPI.cumplidas}/{promesaKPI.total}</p><p className="text-xs text-muted-foreground">Cumplimiento: {formatPercent(promesaKPI.porcentajeCumplimiento)}</p></CardContent></Card>
         <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Freq. Atraso</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{formatPercent(kpi.frecuenciaAtraso)}</p></CardContent></Card>
       </div>
 
@@ -193,24 +240,26 @@ export default function ClienteDetalle() {
           <DialogContent>
             <DialogHeader><DialogTitle>Registrar Pago</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div><Label>Factura</Label>
-                <Select value={pagoForm.factura_id} onValueChange={v => setPagoForm(f => ({ ...f, factura_id: v }))}>
+              <div><Label>Factura (por folio)</Label>
+                <Select value={pagoForm.factura_id} onValueChange={v => {
+                  const fac = pendientesFacturas.find(f => f.id === v);
+                  setPagoForm(f => ({ ...f, factura_id: v, monto: fac ? String(getSaldoFactura(fac.id, fac.monto)) : '' }));
+                }}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar factura" /></SelectTrigger>
-                  <SelectContent>{pendientesFacturas.map(f => <SelectItem key={f.id} value={f.id}>{formatCurrency(f.monto)} - Vence: {f.fecha_vencimiento} ({f.estado})</SelectItem>)}</SelectContent>
+                  <SelectContent>{pendientesFacturas.map(f => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.numero_factura || '—'} · {formatCurrency(f.monto)} · Saldo: {formatCurrency(getSaldoFactura(f.id, f.monto))} ({f.estado})
+                    </SelectItem>
+                  ))}</SelectContent>
                 </Select>
               </div>
-              <div><Label>Monto</Label><Input type="number" value={pagoForm.monto} onChange={e => setPagoForm(f => ({ ...f, monto: e.target.value }))} /></div>
-              <div><Label>Método</Label>
-                <Select value={pagoForm.metodo} onValueChange={v => setPagoForm(f => ({ ...f, metodo: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                    <SelectItem value="cheque">Cheque</SelectItem>
-                    <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div><Label>Monto</Label>
+                <Input type="number" value={pagoForm.monto} onChange={e => setPagoForm(f => ({ ...f, monto: e.target.value }))} placeholder="Monto parcial o total" />
+                {pagoForm.factura_id && (
+                  <p className="text-xs text-muted-foreground mt-1">Saldo: {formatCurrency(getSaldoFactura(pagoForm.factura_id, pendientesFacturas.find(f => f.id === pagoForm.factura_id)?.monto || 0))}</p>
+                )}
               </div>
+              <div><Label>Fecha de Pago</Label><Input type="date" value={pagoForm.fecha_pago} onChange={e => setPagoForm(f => ({ ...f, fecha_pago: e.target.value }))} /></div>
               <div><Label>Referencia</Label><Input value={pagoForm.referencia} onChange={e => setPagoForm(f => ({ ...f, referencia: e.target.value }))} placeholder="Opcional" /></div>
               <Button className="w-full" onClick={handleCreatePago} disabled={createPago.isPending}>Registrar Pago</Button>
             </div>
@@ -227,7 +276,7 @@ export default function ClienteDetalle() {
               <div><Label>Factura (opcional)</Label>
                 <Select value={promesaForm.factura_id} onValueChange={v => setPromesaForm(f => ({ ...f, factura_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
-                  <SelectContent>{pendientesFacturas.map(f => <SelectItem key={f.id} value={f.id}>{formatCurrency(f.monto)} - {f.fecha_vencimiento}</SelectItem>)}</SelectContent>
+                  <SelectContent>{pendientesFacturas.map(f => <SelectItem key={f.id} value={f.id}>{f.numero_factura || '—'} · {formatCurrency(f.monto)} - {f.fecha_vencimiento}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div><Label>Notas</Label><Textarea value={promesaForm.notas} onChange={e => setPromesaForm(f => ({ ...f, notas: e.target.value }))} placeholder="Opcional" /></div>
@@ -258,7 +307,7 @@ export default function ClienteDetalle() {
         </Dialog>
       </div>
 
-      {/* Tabs: Timeline, Facturas, Pagos, Promesas */}
+      {/* Tabs */}
       <Tabs defaultValue="timeline" className="space-y-4">
         <TabsList>
           <TabsTrigger value="timeline"><CalendarClock className="mr-1.5 h-4 w-4" />Timeline</TabsTrigger>
@@ -267,7 +316,6 @@ export default function ClienteDetalle() {
           <TabsTrigger value="promesas"><Handshake className="mr-1.5 h-4 w-4" />Promesas</TabsTrigger>
         </TabsList>
 
-        {/* Timeline */}
         <TabsContent value="timeline">
           <Card>
             <CardHeader><CardTitle className="text-base">Historial Financiero</CardTitle></CardHeader>
@@ -297,36 +345,37 @@ export default function ClienteDetalle() {
           </Card>
         </TabsContent>
 
-        {/* Facturas */}
         <TabsContent value="facturas">
           <Card>
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Folio</TableHead>
                     <TableHead>Monto</TableHead>
+                    <TableHead>Saldo</TableHead>
                     <TableHead>Emisión</TableHead>
                     <TableHead>Vencimiento</TableHead>
                     <TableHead>Pago</TableHead>
                     <TableHead>DPD</TableHead>
                     <TableHead>Estado</TableHead>
-                    <TableHead>Tipo</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {clienteFacturas.map(f => (
                     <TableRow key={f.id}>
+                      <TableCell className="font-mono text-xs">{f.numero_factura || '—'}</TableCell>
                       <TableCell className="font-medium tabular-nums">{formatCurrency(f.monto)}</TableCell>
+                      <TableCell className="tabular-nums">{formatCurrency(getSaldoFactura(f.id, f.monto))}</TableCell>
                       <TableCell>{format(parseISO(f.fecha_emision), 'dd/MM/yy')}</TableCell>
                       <TableCell>{format(parseISO(f.fecha_vencimiento), 'dd/MM/yy')}</TableCell>
                       <TableCell>{f.fecha_pago ? format(parseISO(f.fecha_pago), 'dd/MM/yy') : '—'}</TableCell>
                       <TableCell className="tabular-nums">{f.dpd}d</TableCell>
                       <TableCell><Badge className={estadoColor(f.estado)}>{f.estado}</Badge></TableCell>
-                      <TableCell><Badge variant="outline">{f.tipo}</Badge></TableCell>
                     </TableRow>
                   ))}
                   {clienteFacturas.length === 0 && (
-                    <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Sin facturas</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Sin facturas</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -334,7 +383,6 @@ export default function ClienteDetalle() {
           </Card>
         </TabsContent>
 
-        {/* Pagos */}
         <TabsContent value="pagos">
           <Card>
             <CardContent className="p-0">
@@ -342,20 +390,23 @@ export default function ClienteDetalle() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Fecha</TableHead>
+                    <TableHead>Folio Factura</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
-                    <TableHead>Método</TableHead>
                     <TableHead>Referencia</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagos.map(p => (
-                    <TableRow key={p.id}>
-                      <TableCell>{format(parseISO(p.fecha_pago), 'dd/MM/yy')}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">{formatCurrency(Number(p.monto))}</TableCell>
-                      <TableCell><Badge variant="outline">{p.metodo}</Badge></TableCell>
-                      <TableCell className="text-muted-foreground">{p.referencia || '—'}</TableCell>
-                    </TableRow>
-                  ))}
+                  {pagos.map(p => {
+                    const fac = clienteFacturas.find(f => f.id === p.factura_id);
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell>{format(parseISO(p.fecha_pago), 'dd/MM/yy')}</TableCell>
+                        <TableCell className="font-mono text-xs">{fac?.numero_factura || '—'}</TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">{formatCurrency(Number(p.monto))}</TableCell>
+                        <TableCell className="text-muted-foreground">{p.referencia || '—'}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                   {pagos.length === 0 && (
                     <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Sin pagos registrados</TableCell></TableRow>
                   )}
@@ -365,7 +416,6 @@ export default function ClienteDetalle() {
           </Card>
         </TabsContent>
 
-        {/* Promesas */}
         <TabsContent value="promesas">
           <Card>
             <CardContent className="p-0">

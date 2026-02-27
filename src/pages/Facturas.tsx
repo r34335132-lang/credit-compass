@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useFacturas, useClientes, useCreateFactura, useDeleteFactura, useRegistrarPago } from '@/hooks/useData';
+import { useFacturas, useClientes, useCreateFactura, useDeleteFactura } from '@/hooks/useData';
 import { formatCurrency } from '@/lib/kpi';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, CheckCircle, Search, Download } from 'lucide-react';
+import { Plus, Trash2, Search, Download } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
@@ -21,17 +21,17 @@ export default function Facturas() {
   const { data: clientes = [] } = useClientes();
   const createFactura = useCreateFactura();
   const deleteFactura = useDeleteFactura();
-  const registrarPago = useRegistrarPago();
   const { role } = useAuth();
 
   const [search, setSearch] = useState('');
   const [filterEstado, setFilterEstado] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ cliente_id: '', monto: '', fecha_emision: '', fecha_vencimiento: '' });
+  const [form, setForm] = useState({ cliente_id: '', monto: '', fecha_emision: '', fecha_vencimiento: '', numero_factura: '' });
 
   const filtered = facturas.filter(f => {
     const clienteNombre = (f.cliente as any)?.nombre || '';
-    if (search && !clienteNombre.toLowerCase().includes(search.toLowerCase())) return false;
+    const folio = f.numero_factura || '';
+    if (search && !clienteNombre.toLowerCase().includes(search.toLowerCase()) && !folio.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterEstado !== 'all' && f.estado !== filterEstado) return false;
     return true;
   });
@@ -40,6 +40,7 @@ export default function Facturas() {
     switch (estado) {
       case 'pagada': return 'bg-risk-good-bg text-risk-good';
       case 'vencida': return 'bg-risk-critical-bg text-risk-critical';
+      case 'parcial': return 'bg-risk-bad-bg text-risk-bad';
       default: return 'bg-accent text-accent-foreground';
     }
   };
@@ -49,6 +50,11 @@ export default function Facturas() {
       toast.error('Todos los campos son requeridos');
       return;
     }
+    // Validate unique folio
+    if (form.numero_factura) {
+      const exists = facturas.some(f => f.numero_factura === form.numero_factura);
+      if (exists) { toast.error('El folio ya existe. Use un folio diferente.'); return; }
+    }
     try {
       await createFactura.mutateAsync({
         cliente_id: form.cliente_id,
@@ -56,18 +62,18 @@ export default function Facturas() {
         fecha_emision: form.fecha_emision,
         fecha_vencimiento: form.fecha_vencimiento,
         estado: 'pendiente',
+        numero_factura: form.numero_factura || undefined,
       });
       toast.success('Factura creada');
       setDialogOpen(false);
-      setForm({ cliente_id: '', monto: '', fecha_emision: '', fecha_vencimiento: '' });
-    } catch { toast.error('Error al crear factura'); }
-  };
-
-  const handlePago = async (facturaId: string) => {
-    try {
-      await registrarPago.mutateAsync({ facturaId, fechaPago: new Date().toISOString().split('T')[0] });
-      toast.success('Pago registrado');
-    } catch { toast.error('Error al registrar pago'); }
+      setForm({ cliente_id: '', monto: '', fecha_emision: '', fecha_vencimiento: '', numero_factura: '' });
+    } catch (e: any) {
+      if (e?.message?.includes('idx_facturas_numero_factura_unique')) {
+        toast.error('El folio ya existe');
+      } else {
+        toast.error('Error al crear factura');
+      }
+    }
   };
 
   return (
@@ -87,6 +93,7 @@ export default function Facturas() {
           <DialogContent>
             <DialogHeader><DialogTitle>Nueva Factura</DialogTitle></DialogHeader>
             <div className="space-y-4">
+              <div><Label>Folio</Label><Input value={form.numero_factura} onChange={e => setForm(f => ({ ...f, numero_factura: e.target.value }))} placeholder="Ej: FAC-001 (único)" /></div>
               <div><Label>Cliente</Label>
                 <Select value={form.cliente_id} onValueChange={v => setForm(f => ({ ...f, cliente_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
@@ -107,7 +114,7 @@ export default function Facturas() {
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Buscar por cliente..." value={search} onChange={e => setSearch(e.target.value)} />
+          <Input className="pl-9" placeholder="Buscar por cliente o folio..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <Select value={filterEstado} onValueChange={setFilterEstado}>
           <SelectTrigger className="w-[160px]"><SelectValue placeholder="Estado" /></SelectTrigger>
@@ -126,11 +133,13 @@ export default function Facturas() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Folio</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead>Emisión</TableHead>
                 <TableHead>Vencimiento</TableHead>
                 <TableHead>Pago</TableHead>
+                <TableHead>DPD</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -138,6 +147,7 @@ export default function Facturas() {
             <TableBody>
               {filtered.map(f => (
                 <TableRow key={f.id}>
+                  <TableCell className="font-mono text-xs">{f.numero_factura || '—'}</TableCell>
                   <TableCell>
                     <Link to={`/clientes/${f.cliente_id}`} className="font-medium text-primary hover:underline">
                       {(f.cliente as any)?.nombre || f.cliente_id}
@@ -147,23 +157,19 @@ export default function Facturas() {
                   <TableCell>{format(parseISO(f.fecha_emision), 'dd/MM/yy')}</TableCell>
                   <TableCell>{format(parseISO(f.fecha_vencimiento), 'dd/MM/yy')}</TableCell>
                   <TableCell>{f.fecha_pago ? format(parseISO(f.fecha_pago), 'dd/MM/yy') : '—'}</TableCell>
+                  <TableCell className="tabular-nums">{f.dpd > 0 ? `${f.dpd}d` : '—'}</TableCell>
                   <TableCell><Badge className={estadoColor(f.estado)}>{f.estado}</Badge></TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      {f.estado !== 'pagada' && (
-                        <Button variant="ghost" size="icon" onClick={() => handlePago(f.id)} title="Registrar pago">
-                          <CheckCircle className="h-4 w-4 text-risk-good" />
-                        </Button>
-                      )}
+                    {role === 'admin' && (
                       <Button variant="ghost" size="icon" onClick={() => { deleteFactura.mutate(f.id); toast.success('Eliminada'); }}>
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
                       </Button>
-                    </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No se encontraron facturas</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No se encontraron facturas</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
