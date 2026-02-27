@@ -38,7 +38,7 @@ export function useDeleteAsesor() {
 
 export function useCreateCliente() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean }) => api.createCliente(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
+  return useMutation({ mutationFn: (data: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean; tipo_cliente?: 'normal' | 'grupo_originador' }) => api.createCliente(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
 }
 
 export function useUpdateCliente() {
@@ -120,3 +120,21 @@ export function useUpdatePromesaPago() {
     },
   });
 }
+
+// Historial Buro
+export function useHistorialBuro(clienteId: string) {
+  return useQuery({ queryKey: ['historial_buro', clienteId], queryFn: () => api.fetchHistorialBuro(clienteId), enabled: !!clienteId });
+}
+
+export function useUpdateClienteEstadoCredito() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: string; estado_credito: 'activo' | 'riesgo' | 'buro'; motivo: string | null; registrado_por: string | null }) =>
+      api.updateClienteEstadoCredito(data.id, data.estado_credito, data.motivo, data.registrado_por),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clientes'] });
+      qc.invalidateQueries({ queryKey: ['historial_buro'] });
+    },
+  });
+}
+
