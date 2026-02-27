@@ -1,4 +1,4 @@
-import { Cliente, Factura, Asesor, RiskLevel, ClienteKPI, AsesorKPI, Alerta, PromesaPago, PromesaKPI } from '@/types';
+import { Cliente, Factura, Asesor, RiskLevel, ClienteKPI, AsesorKPI, Alerta, PromesaPago, PromesaKPI, GrupoKPI } from '@/types';
 import { differenceInDays, parseISO } from 'date-fns';
 
 export function getRiskLevel(dpd: number): RiskLevel {
@@ -112,6 +112,56 @@ export function calcClienteKPI(cliente: Cliente, facturas: Factura[], allPagos?:
   };
 }
 
+export function calcGrupoKPI(grupo: Cliente, clientes: Cliente[], facturas: Factura[], allPagos?: { factura_id: string; monto: number }[]): GrupoKPI {
+  const subClientes = clientes.filter(c => c.parent_cliente_id === grupo.id);
+  const allGroupClients = [grupo, ...subClientes];
+  const allGroupIds = allGroupClients.map(c => c.id);
+  const groupFacturas = facturas.filter(f => allGroupIds.includes(f.cliente_id));
+
+  // Monetary KPIs: ALL clients (including buro)
+  const totalFacturado = groupFacturas.reduce((s, f) => s + f.monto, 0);
+  const today = new Date();
+  const montoVencido = groupFacturas.filter(f =>
+    f.estado === 'vencida' ||
+    (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) ||
+    (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
+  ).reduce((s, f) => {
+    if (allPagos) {
+      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
+      return s + Math.max(0, f.monto - pagado);
+    }
+    return s + f.monto;
+  }, 0);
+
+  // Behavioral KPIs: only activo + riesgo clients
+  const behavioralClients = allGroupClients.filter(c => c.estado_credito !== 'buro');
+  const behavioralKPIs = behavioralClients.map(c => calcClienteKPI(c, facturas, allPagos));
+  const promedioDPD = behavioralKPIs.length > 0
+    ? Math.round(behavioralKPIs.reduce((s, k) => s + k.dpd, 0) / behavioralKPIs.length)
+    : 0;
+
+  // Uso de linea consolidated
+  const totalLinea = allGroupClients.reduce((s, c) => s + c.linea_credito, 0);
+  const totalSaldoPendiente = groupFacturas.filter(f => f.estado !== 'pagada').reduce((s, f) => {
+    if (allPagos) {
+      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
+      return s + Math.max(0, f.monto - pagado);
+    }
+    return s + f.monto;
+  }, 0);
+  const usoLinea = totalLinea > 0 ? (totalSaldoPendiente / totalLinea) * 100 : 0;
+
+  return {
+    grupo,
+    subClientes,
+    totalFacturado,
+    montoVencido,
+    promedioDPD,
+    riesgo: getRiskLevel(promedioDPD),
+    usoLinea,
+  };
+}
+
 export function calcPromesaKPI(promesas: PromesaPago[]): PromesaKPI {
   const total = promesas.length;
   const cumplidas = promesas.filter(p => p.estado === 'cumplida').length;
@@ -132,6 +182,7 @@ export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Fac
   const clienteIds = new Set(asesorClientes.map(c => c.id));
   const asesorFacturas = facturas.filter(f => clienteIds.has(f.cliente_id));
   
+  // Monetary KPIs: ALL clients including buro
   const totalCartera = asesorFacturas.reduce((s, f) => s + f.monto, 0);
   
   const today = new Date();
@@ -141,12 +192,15 @@ export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Fac
     (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
   ).reduce((s, f) => s + f.monto, 0);
   
-  const clienteKPIs = asesorClientes.map(c => calcClienteKPI(c, facturas));
-  const promedioDPD = clienteKPIs.length > 0 
-    ? Math.round(clienteKPIs.reduce((s, k) => s + k.dpd, 0) / clienteKPIs.length) 
+  // Behavioral KPIs: only activo + riesgo clients
+  const behavioralClients = asesorClientes.filter(c => c.estado_credito !== 'buro');
+  const behavioralKPIs = behavioralClients.map(c => calcClienteKPI(c, facturas));
+  const promedioDPD = behavioralKPIs.length > 0 
+    ? Math.round(behavioralKPIs.reduce((s, k) => s + k.dpd, 0) / behavioralKPIs.length) 
     : 0;
   
-  const clientesEnRiesgo = clienteKPIs.filter(k => k.riesgo === 'muy_malo' || k.riesgo === 'pesimo').length;
+  const allKPIs = asesorClientes.map(c => calcClienteKPI(c, facturas));
+  const clientesEnRiesgo = allKPIs.filter(k => k.riesgo === 'muy_malo' || k.riesgo === 'pesimo').length;
 
   return {
     asesor,
@@ -163,6 +217,10 @@ export function generateAlertas(clientes: Cliente[], asesores: Asesor[], factura
   const alertas: Alerta[] = [];
   
   clientes.forEach(cliente => {
+    // Skip grupo_originador (no invoices) and buro clients from behavioral alerts
+    if (cliente.tipo_cliente === 'grupo_originador') return;
+    if (cliente.estado_credito === 'buro') return;
+    
     const kpi = calcClienteKPI(cliente, facturas);
     if (kpi.riesgo === 'muy_malo' || kpi.riesgo === 'pesimo') {
       const asesor = asesores.find(a => a.id === cliente.asesor_id);
@@ -192,3 +250,4 @@ export function formatCurrency(amount: number): string {
 export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
+
