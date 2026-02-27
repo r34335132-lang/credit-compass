@@ -21,6 +21,7 @@ export interface Cliente {
   estado_credito: string;
   parent_cliente_id: string | null;
   es_grupo: boolean;
+  tipo_cliente?: string;
   asesor?: Asesor;
 }
 
@@ -112,3 +113,24 @@ export interface Alerta {
   riesgo: RiskLevel;
   dpd: number;
 }
+
+export interface GrupoKPI {
+  grupo: Cliente;
+  subClientes: Cliente[];
+  totalFacturado: number;
+  montoVencido: number;
+  promedioDPD: number;
+  riesgo: RiskLevel;
+  usoLinea: number;
+}
+
+export interface HistorialBuro {
+  id: string;
+  cliente_id: string;
+  estado_anterior: string;
+  estado_nuevo: string;
+  motivo: string | null;
+  registrado_por: string | null;
+  created_at: string;
+}
+
