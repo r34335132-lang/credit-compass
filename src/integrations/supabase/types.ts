@@ -53,6 +53,7 @@ export type Database = {
           linea_credito: number
           nombre: string
           parent_cliente_id: string | null
+          tipo_cliente: string
         }
         Insert: {
           asesor_id?: string | null
@@ -68,6 +69,7 @@ export type Database = {
           linea_credito?: number
           nombre: string
           parent_cliente_id?: string | null
+          tipo_cliente?: string
         }
         Update: {
           asesor_id?: string | null
@@ -83,6 +85,7 @@ export type Database = {
           linea_credito?: number
           nombre?: string
           parent_cliente_id?: string | null
+          tipo_cliente?: string
         }
         Relationships: [
           {
@@ -95,6 +98,44 @@ export type Database = {
           {
             foreignKeyName: "clientes_parent_cliente_id_fkey"
             columns: ["parent_cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      historial_buro: {
+        Row: {
+          id: string
+          cliente_id: string
+          estado_anterior: string
+          estado_nuevo: string
+          motivo: string | null
+          registrado_por: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cliente_id: string
+          estado_anterior: string
+          estado_nuevo: string
+          motivo?: string | null
+          registrado_por?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cliente_id?: string
+          estado_anterior?: string
+          estado_nuevo?: string
+          motivo?: string | null
+          registrado_por?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "historial_buro_cliente_id_fkey"
+            columns: ["cliente_id"]
             isOneToOne: false
             referencedRelation: "clientes"
             referencedColumns: ["id"]
