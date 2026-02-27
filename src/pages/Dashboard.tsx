@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { useClientes, useAsesores, useFacturas, useAllPromesas } from '@/hooks/useData';
-import { calcClienteKPI, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
+import { useClientes, useAsesores, useFacturas, useAllPromesas, useAllPagos } from '@/hooks/useData';
+import { getClienteKPIEffective, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
 import { KPICard } from '@/components/KPICard';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,18 +24,21 @@ export default function Dashboard() {
   const { data: asesores, isLoading: loadingA } = useAsesores();
   const { data: facturas, isLoading: loadingF } = useFacturas();
   const { data: allPromesas = [] } = useAllPromesas();
+  const { data: allPagos = [], isLoading: loadingP } = useAllPagos();
 
-  const isLoading = loadingC || loadingA || loadingF;
+  const isLoading = loadingC || loadingA || loadingF || loadingP;
 
   const kpis = useMemo(() => {
     if (!clientes || !asesores || !facturas) return null;
     
-    const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
+    const clienteKPIs = clientes.map(c => getClienteKPIEffective(c, clientes, facturas));
     const asesorKPIs = asesores.map(a => calcAsesorKPI(a, clientes, facturas));
     const alertas = generateAlertas(clientes, asesores, facturas);
     const promesaKPI = calcPromesaKPI(allPromesas);
 
-    const totalCartera = facturas.reduce((s, f) => s + f.monto, 0);
+    const totalFacturado = facturas.reduce((s, f) => s + f.monto, 0);
+    const totalPagado = allPagos.reduce((s, p) => s + Number(p.monto), 0);
+    const totalCartera = totalFacturado - totalPagado;
     const montoVencido = clienteKPIs.reduce((s, k) => s + k.montoVencido, 0);
 
     // Risk distribution
@@ -84,7 +87,7 @@ export default function Dashboard() {
       totalFacturas: facturas.length,
       promedioDPD: clienteKPIs.length > 0 ? Math.round(clienteKPIs.reduce((s, k) => s + k.dpd, 0) / clienteKPIs.length) : 0,
     };
-  }, [clientes, asesores, facturas, allPromesas]);
+  }, [clientes, asesores, facturas, allPromesas, allPagos]);
 
   if (isLoading) {
     return (
@@ -249,3 +252,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
