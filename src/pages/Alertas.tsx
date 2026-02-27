@@ -1,8 +1,9 @@
 import { useClientes, useAsesores, useFacturas } from '@/hooks/useData';
-import { generateAlertas } from '@/lib/kpi';
+import { generateAlertas, calcClienteKPI, formatCurrency } from '@/lib/kpi';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AlertTriangle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { AlertTriangle, ShieldAlert } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Alertas() {
@@ -11,12 +12,14 @@ export default function Alertas() {
   const { data: facturas = [] } = useFacturas();
 
   const alertas = generateAlertas(clientes, asesores, facturas);
+  const clientesBuro = clientes.filter(c => c.estado_credito === 'buro');
+  const buroKPIs = clientesBuro.map(c => calcClienteKPI(c, facturas));
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold">Alertas de Riesgo</h1>
-        <p className="text-muted-foreground">{alertas.length} clientes con riesgo elevado</p>
+        <p className="text-muted-foreground">{alertas.length} clientes con riesgo elevado{clientesBuro.length > 0 ? ` · ${clientesBuro.length} en buro` : ''}</p>
       </div>
 
       {alertas.length === 0 ? (
@@ -52,6 +55,38 @@ export default function Alertas() {
           ))}
         </div>
       )}
+
+      {/* Clientes en Buro section */}
+      {clientesBuro.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-5 w-5 text-destructive" />
+            <h2 className="text-lg font-semibold">Clientes en Buro</h2>
+            <Badge className="bg-destructive/10 text-destructive border-destructive/20">{clientesBuro.length}</Badge>
+          </div>
+          {buroKPIs.map(k => {
+            const asesor = asesores.find(a => a.id === k.cliente.asesor_id);
+            return (
+              <Card key={k.cliente.id} className="border-l-4 border-l-destructive">
+                <CardContent className="flex items-start gap-4 p-5">
+                  <div className="rounded-lg bg-destructive/10 p-2.5">
+                    <ShieldAlert className="h-5 w-5 text-destructive" />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <div className="flex items-center gap-3">
+                      <Link to={`/clientes/${k.cliente.id}`} className="font-semibold text-primary hover:underline">{k.cliente.nombre}</Link>
+                      <Badge className="bg-destructive text-destructive-foreground text-xs">Buro</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">Monto vencido: {formatCurrency(k.montoVencido)} - Saldo pendiente: {formatCurrency(k.saldoPendiente)}</p>
+                    <p className="text-xs text-muted-foreground">Asesor: <span className="font-medium">{asesor?.nombre || 'Sin asesor'}</span></p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+
