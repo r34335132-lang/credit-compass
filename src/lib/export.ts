@@ -14,11 +14,13 @@ function downloadCSV(filename: string, headers: string[], rows: string[][]) {
 }
 
 export function exportClientesCSV(kpis: ClienteKPI[]) {
-  const headers = ['Cliente', 'Asesor', 'Riesgo', 'Línea de Crédito', 'Facturado', 'Vencido', 'Saldo Pendiente', 'DPD', 'Uso Línea %', '% Pago a Tiempo'];
+  const headers = ['Cliente', 'Asesor', 'Riesgo', 'Estado Crédito', 'Tipo Cliente', 'Línea de Crédito', 'Facturado', 'Vencido', 'Saldo Pendiente', 'DPD', 'Uso Línea %', '% Pago a Tiempo'];
   const rows = kpis.map(k => [
     k.cliente.nombre,
     k.cliente.asesor?.nombre || '—',
     k.riesgo,
+    k.cliente.estado_credito,
+    k.cliente.tipo_cliente || 'normal',
     formatCurrency(k.cliente.linea_credito),
     formatCurrency(k.totalFacturado),
     formatCurrency(k.montoVencido),
@@ -28,6 +30,21 @@ export function exportClientesCSV(kpis: ClienteKPI[]) {
     String(Math.round(k.porcentajePagoATiempo)),
   ]);
   downloadCSV(`clientes_kpi_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+}
+
+export function exportCarteraCastigadaCSV(kpis: ClienteKPI[]) {
+  const buroKPIs = kpis.filter(k => k.cliente.estado_credito === 'buro');
+  const headers = ['Cliente', 'Asesor', 'Línea de Crédito', 'Facturado', 'Vencido', 'Saldo Pendiente', 'DPD'];
+  const rows = buroKPIs.map(k => [
+    k.cliente.nombre,
+    k.cliente.asesor?.nombre || '—',
+    formatCurrency(k.cliente.linea_credito),
+    formatCurrency(k.totalFacturado),
+    formatCurrency(k.montoVencido),
+    formatCurrency(k.saldoPendiente),
+    String(k.dpd),
+  ]);
+  downloadCSV(`cartera_castigada_${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
 }
 
 export function exportFacturasCSV(facturas: Factura[]) {
