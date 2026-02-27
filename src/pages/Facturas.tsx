@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Search, Download } from 'lucide-react';
@@ -91,13 +91,21 @@ export default function Facturas() {
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Nueva Factura</Button></DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Nueva Factura</DialogTitle></DialogHeader>
+            <DialogHeader>
+              <DialogTitle>Nueva Factura</DialogTitle>
+              <DialogDescription>Completa los datos de la nueva factura.</DialogDescription>
+            </DialogHeader>
             <div className="space-y-4">
-              <div><Label>Folio</Label><Input value={form.numero_factura} onChange={e => setForm(f => ({ ...f, numero_factura: e.target.value }))} placeholder="Ej: FAC-001 (único)" /></div>
+              <div><Label>Folio</Label><Input value={form.numero_factura} onChange={e => setForm(f => ({ ...f, numero_factura: e.target.value }))} placeholder="Ej: FAC-001 (unico)" /></div>
               <div><Label>Cliente</Label>
                 <Select value={form.cliente_id} onValueChange={v => setForm(f => ({ ...f, cliente_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
-                  <SelectContent>{clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {clientes.length > 0
+                      ? clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)
+                      : <p className="py-4 text-center text-sm text-muted-foreground">No hay clientes registrados</p>
+                    }
+                  </SelectContent>
                 </Select>
               </div>
               <div><Label>Monto</Label><Input type="number" value={form.monto} onChange={e => setForm(f => ({ ...f, monto: e.target.value }))} /></div>
