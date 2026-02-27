@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useClientes, useAsesores, useFacturas, usePagosByCliente, useNotasCobranza, usePromesasPago, useCreatePago, useCreateNotaCobranza, useCreatePromesaPago, useUpdatePromesaPago, useHistorialBuro, useUpdateClienteEstadoCredito } from '@/hooks/useData';
-import { calcClienteKPI, calcPromesaKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { useClientes, useAsesores, useFacturas, usePagosByCliente, useNotasCobranza, usePromesasPago, useCreatePago, useUpdatePago, useDeletePago, useCreateNotaCobranza, useCreatePromesaPago, useUpdatePromesaPago, useHistorialBuro, useUpdateClienteEstadoCredito } from '@/hooks/useData';
+import { getClienteKPIEffective, calcPromesaKPI, formatCurrency, formatPercent } from '@/lib/kpi';
 import { useAuth } from '@/hooks/useAuth';
 import { RiskBadge } from '@/components/RiskBadge';
 import { KPICard } from '@/components/KPICard';
@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, DollarSign, Clock, TrendingDown, CreditCard, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText, Users, ShieldAlert, History } from 'lucide-react';
+import { ArrowLeft, DollarSign, Clock, TrendingDown, CreditCard, MessageSquare, Handshake, CalendarClock, CheckCircle, AlertTriangle, FileText, Users, ShieldAlert, History, Pencil, Trash2 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -33,6 +33,8 @@ export default function ClienteDetalle() {
   const { data: historialBuro = [] } = useHistorialBuro(id || '');
 
   const createPago = useCreatePago();
+  const editPago = useUpdatePago();
+  const removePago = useDeletePago();
   const createNota = useCreateNotaCobranza();
   const createPromesa = useCreatePromesaPago();
   const updatePromesa = useUpdatePromesaPago();
@@ -44,6 +46,8 @@ export default function ClienteDetalle() {
   const [estadoCreditoDialog, setEstadoCreditoDialog] = useState(false);
   const [estadoCreditoForm, setEstadoCreditoForm] = useState({ estado_credito: '' as 'activo' | 'riesgo' | 'buro' | '', motivo: '' });
   const [pagoForm, setPagoForm] = useState({ factura_id: '', monto: '', fecha_pago: new Date().toISOString().split('T')[0], referencia: '' });
+  const [editPagoDialog, setEditPagoDialog] = useState(false);
+  const [editPagoForm, setEditPagoForm] = useState<{ id: string; factura_id: string; monto: string; fecha_pago: string; referencia: string; originalMonto: number }>({ id: '', factura_id: '', monto: '', fecha_pago: '', referencia: '', originalMonto: 0 });
   const [notaForm, setNotaForm] = useState({ tipo: 'nota', contenido: '' });
   const [promesaForm, setPromesaForm] = useState({ factura_id: '', monto_prometido: '', fecha_promesa: '', notas: '' });
   const [viewMode, setViewMode] = useState<'individual' | 'grupo'>('individual');
@@ -57,14 +61,14 @@ export default function ClienteDetalle() {
   const isGrupo = cliente.es_grupo || subClientes.length > 0;
   const grupoClienteIds = isGrupo ? [cliente.id, ...subClientes.map(c => c.id)] : [cliente.id];
   
-  const effectiveFacturas = viewMode === 'grupo' && isGrupo
-    ? facturas.filter(f => grupoClienteIds.includes(f.cliente_id))
-    : facturas;
+  const showConsolidated = (viewMode === 'grupo' && isGrupo) || (isGrupo && viewMode === 'individual');
 
-  const kpi = calcClienteKPI(cliente, effectiveFacturas, pagos.map(p => ({ factura_id: p.factura_id, monto: Number(p.monto) })));
-  const clienteFacturas = effectiveFacturas.filter(f => 
-    viewMode === 'grupo' && isGrupo ? grupoClienteIds.includes(f.cliente_id) : f.cliente_id === cliente.id
-  );
+  // KPI: use getClienteKPIEffective which automatically aggregates sub-clients for grupo parents
+  const kpi = getClienteKPIEffective(cliente, clientes, facturas, pagos.map(p => ({ factura_id: p.factura_id, monto: Number(p.monto) })));
+  
+  const clienteFacturas = isGrupo
+    ? facturas.filter(f => grupoClienteIds.includes(f.cliente_id))
+    : facturas.filter(f => f.cliente_id === cliente.id);
   const asesor = asesores.find(a => a.id === cliente.asesor_id);
   const promesaKPI = calcPromesaKPI(promesas);
 
@@ -162,6 +166,44 @@ export default function ClienteDetalle() {
       setPagoDialog(false);
       setPagoForm({ factura_id: '', monto: '', fecha_pago: new Date().toISOString().split('T')[0], referencia: '' });
     } catch { toast.error('Error al registrar pago'); }
+  };
+
+  const handleDeletePago = async (pagoId: string) => {
+    if (!window.confirm('Estas seguro de eliminar este pago? Esta accion no se puede deshacer.')) return;
+    try {
+      await removePago.mutateAsync(pagoId);
+      toast.success('Pago eliminado');
+    } catch { toast.error('Error al eliminar pago'); }
+  };
+
+  const handleOpenEditPago = (pago: { id: string; factura_id: string; monto: number; fecha_pago: string; referencia: string | null }) => {
+    setEditPagoForm({
+      id: pago.id,
+      factura_id: pago.factura_id,
+      monto: String(pago.monto),
+      fecha_pago: pago.fecha_pago,
+      referencia: pago.referencia || '',
+      originalMonto: Number(pago.monto),
+    });
+    setEditPagoDialog(true);
+  };
+
+  const handleUpdatePago = async () => {
+    if (!editPagoForm.monto || !editPagoForm.fecha_pago) { toast.error('Monto y fecha son requeridos'); return; }
+    const nuevoMonto = Number(editPagoForm.monto);
+    if (nuevoMonto <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
+    // Validate that new monto doesn't exceed invoice saldo + the original pago monto (what was already applied)
+    const factura = clienteFacturas.find(f => f.id === editPagoForm.factura_id);
+    if (factura) {
+      const saldo = getSaldoFactura(factura.id, factura.monto);
+      const maxAllowed = saldo + editPagoForm.originalMonto;
+      if (nuevoMonto > maxAllowed) { toast.error(`El monto excede el saldo disponible (${formatCurrency(maxAllowed)})`); return; }
+    }
+    try {
+      await editPago.mutateAsync({ id: editPagoForm.id, monto: nuevoMonto, fecha_pago: editPagoForm.fecha_pago, referencia: editPagoForm.referencia || undefined });
+      toast.success('Pago actualizado');
+      setEditPagoDialog(false);
+    } catch { toast.error('Error al actualizar pago'); }
   };
 
   const handleCreateNota = async () => {
@@ -473,6 +515,7 @@ export default function ClienteDetalle() {
                     <TableHead>Folio Factura</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
                     <TableHead>Referencia</TableHead>
+                    <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -484,11 +527,21 @@ export default function ClienteDetalle() {
                         <TableCell className="font-mono text-xs">{fac?.numero_factura || '—'}</TableCell>
                         <TableCell className="text-right font-medium tabular-nums">{formatCurrency(Number(p.monto))}</TableCell>
                         <TableCell className="text-muted-foreground">{p.referencia || '—'}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleOpenEditPago(p)} title="Editar pago">
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeletePago(p.id)} disabled={removePago.isPending} title="Eliminar pago">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
                   {pagos.length === 0 && (
-                    <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">Sin pagos registrados</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">Sin pagos registrados</TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>
@@ -580,6 +633,38 @@ export default function ClienteDetalle() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Pago Dialog */}
+      <Dialog open={editPagoDialog} onOpenChange={setEditPagoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Pago</DialogTitle>
+            <DialogDescription>Modifica los datos del pago registrado.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Monto</Label>
+              <Input type="number" value={editPagoForm.monto} onChange={e => setEditPagoForm(f => ({ ...f, monto: e.target.value }))} />
+              {editPagoForm.factura_id && (() => {
+                const fac = clienteFacturas.find(f => f.id === editPagoForm.factura_id);
+                if (!fac) return null;
+                const saldo = getSaldoFactura(fac.id, fac.monto);
+                const maxAllowed = saldo + editPagoForm.originalMonto;
+                return <p className="text-xs text-muted-foreground mt-1">Maximo permitido: {formatCurrency(maxAllowed)}</p>;
+              })()}
+            </div>
+            <div>
+              <Label>Fecha de Pago</Label>
+              <Input type="date" value={editPagoForm.fecha_pago} onChange={e => setEditPagoForm(f => ({ ...f, fecha_pago: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Referencia</Label>
+              <Input value={editPagoForm.referencia} onChange={e => setEditPagoForm(f => ({ ...f, referencia: e.target.value }))} placeholder="Opcional" />
+            </div>
+            <Button className="w-full" onClick={handleUpdatePago} disabled={editPago.isPending}>Guardar Cambios</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
