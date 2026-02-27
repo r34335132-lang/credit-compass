@@ -45,9 +45,18 @@ export default function Facturas() {
     }
   };
 
+  // Filter out grupo_originador clients for the selector
+  const clientesFacturables = clientes.filter(c => c.tipo_cliente !== 'grupo_originador');
+
   const handleCreate = async () => {
     if (!form.cliente_id || !form.monto || !form.fecha_emision || !form.fecha_vencimiento) {
       toast.error('Todos los campos son requeridos');
+      return;
+    }
+    // Validate client is not grupo_originador
+    const selectedCliente = clientes.find(c => c.id === form.cliente_id);
+    if (selectedCliente?.tipo_cliente === 'grupo_originador') {
+      toast.error('No se pueden crear facturas para un grupo originador');
       return;
     }
     // Validate unique folio
@@ -101,8 +110,8 @@ export default function Facturas() {
                 <Select value={form.cliente_id} onValueChange={v => setForm(f => ({ ...f, cliente_id: v }))}>
                   <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
                   <SelectContent>
-                    {clientes.length > 0
-                      ? clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)
+                    {clientesFacturables.length > 0
+                      ? clientesFacturables.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)
                       : <p className="py-4 text-center text-sm text-muted-foreground">No hay clientes registrados</p>
                     }
                   </SelectContent>
@@ -186,3 +195,4 @@ export default function Facturas() {
     </div>
   );
 }
+
