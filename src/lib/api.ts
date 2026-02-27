@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { Asesor, Cliente, Factura, Pago, NotaCobranza, PromesaPago } from '@/types';
+import { Asesor, Cliente, Factura, Pago, NotaCobranza, PromesaPago, HistorialBuro } from '@/types';
 
 // Asesores
 export async function fetchAsesores(): Promise<Asesor[]> {
@@ -32,7 +32,7 @@ export async function fetchClientes(): Promise<Cliente[]> {
   return data as unknown as Cliente[];
 }
 
-export async function createCliente(cliente: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean }) {
+export async function createCliente(cliente: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean; tipo_cliente?: 'normal' | 'grupo_originador' }) {
   const { data, error } = await supabase.from('clientes').insert(cliente).select().single();
   if (error) throw error;
   return data;
@@ -151,3 +151,38 @@ export async function updatePromesaPago(id: string, data: { estado: string }) {
   const { error } = await supabase.from('promesas_pago').update(data).eq('id', id);
   if (error) throw error;
 }
+
+// Historial Buro
+export async function fetchHistorialBuro(clienteId: string): Promise<HistorialBuro[]> {
+  const { data, error } = await supabase.from('historial_buro').select('*').eq('cliente_id', clienteId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data as HistorialBuro[];
+}
+
+export async function updateClienteEstadoCredito(
+  id: string,
+  estado_credito: 'activo' | 'riesgo' | 'buro',
+  motivo: string | null,
+  registrado_por: string | null
+) {
+  // Fetch current estado
+  const { data: current, error: fetchError } = await supabase.from('clientes').select('estado_credito').eq('id', id).single();
+  if (fetchError) throw fetchError;
+
+  const estado_anterior = current.estado_credito;
+
+  // Update clientes.estado_credito
+  const { error: updateError } = await supabase.from('clientes').update({ estado_credito }).eq('id', id);
+  if (updateError) throw updateError;
+
+  // Insert historial_buro record
+  const { error: histError } = await supabase.from('historial_buro').insert({
+    cliente_id: id,
+    estado_anterior,
+    estado_nuevo: estado_credito,
+    motivo,
+    registrado_por,
+  });
+  if (histError) throw histError;
+}
+
