@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useClientes, useAsesores, useCreateCliente, useDeleteCliente, useUpdateCliente, useFacturas } from '@/hooks/useData';
-import { calcClienteKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { calcClienteKPI, calcGrupoKPI, formatCurrency, formatPercent } from '@/lib/kpi';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -30,10 +30,11 @@ export default function Clientes() {
   const [search, setSearch] = useState('');
   const [filterAsesor, setFilterAsesor] = useState<string>('all');
   const [filterRiesgo, setFilterRiesgo] = useState<string>('all');
+  const [filterEstadoCredito, setFilterEstadoCredito] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [grupoDialog, setGrupoDialog] = useState(false);
   const [showGrupos, setShowGrupos] = useState(false);
-  const [form, setForm] = useState({ nombre: '', asesor_id: '', linea_credito: '', es_grupo: false, parent_cliente_id: '' });
+  const [form, setForm] = useState({ nombre: '', asesor_id: '', linea_credito: '', es_grupo: false, parent_cliente_id: '', tipo_cliente: 'normal' as 'normal' | 'grupo_originador' });
   const [grupoForm, setGrupoForm] = useState({ cliente_id: '', parent_cliente_id: '' });
 
   const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
@@ -49,6 +50,7 @@ export default function Clientes() {
     if (search && !k.cliente.nombre.toLowerCase().includes(search.toLowerCase())) return false;
     if (filterAsesor !== 'all' && k.cliente.asesor_id !== filterAsesor) return false;
     if (filterRiesgo !== 'all' && k.riesgo !== filterRiesgo) return false;
+    if (filterEstadoCredito !== 'all' && k.cliente.estado_credito !== filterEstadoCredito) return false;
     return true;
   });
 
@@ -68,13 +70,14 @@ export default function Clientes() {
       await createCliente.mutateAsync({
         nombre: form.nombre,
         asesor_id: form.asesor_id || null,
-        linea_credito: Number(form.linea_credito) || 0,
-        es_grupo: form.es_grupo,
-        parent_cliente_id: form.parent_cliente_id && form.parent_cliente_id !== '__none__' ? form.parent_cliente_id : null,
+        linea_credito: form.tipo_cliente === 'grupo_originador' ? 0 : (Number(form.linea_credito) || 0),
+        es_grupo: form.es_grupo || form.tipo_cliente === 'grupo_originador',
+        parent_cliente_id: form.tipo_cliente === 'grupo_originador' ? null : (form.parent_cliente_id && form.parent_cliente_id !== '__none__' ? form.parent_cliente_id : null),
+        tipo_cliente: form.tipo_cliente,
       });
       toast.success('Cliente creado');
       setDialogOpen(false);
-      setForm({ nombre: '', asesor_id: '', linea_credito: '', es_grupo: false, parent_cliente_id: '' });
+      setForm({ nombre: '', asesor_id: '', linea_credito: '', es_grupo: false, parent_cliente_id: '', tipo_cliente: 'normal' });
     } catch { toast.error('Error al crear cliente'); }
   };
 
@@ -147,6 +150,15 @@ export default function Clientes() {
                     <DialogDescription>Completa los datos del nuevo cliente.</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
+                    <div><Label>Tipo de Cliente</Label>
+                      <Select value={form.tipo_cliente} onValueChange={v => setForm(f => ({ ...f, tipo_cliente: v as 'normal' | 'grupo_originador', es_grupo: v === 'grupo_originador' ? true : f.es_grupo, parent_cliente_id: v === 'grupo_originador' ? '' : f.parent_cliente_id, linea_credito: v === 'grupo_originador' ? '' : f.linea_credito }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="normal">Normal</SelectItem>
+                          <SelectItem value="grupo_originador">Grupo Originador</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div><Label>Nombre</Label><Input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} /></div>
                     <div><Label>Asesor</Label>
                       <Select value={form.asesor_id} onValueChange={v => setForm(f => ({ ...f, asesor_id: v }))}>
@@ -159,12 +171,16 @@ export default function Clientes() {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div><Label>Linea de Credito</Label><Input type="number" value={form.linea_credito} onChange={e => setForm(f => ({ ...f, linea_credito: e.target.value }))} /></div>
-                    <div className="flex items-center gap-3">
-                      <Switch checked={form.es_grupo} onCheckedChange={v => setForm(f => ({ ...f, es_grupo: v }))} />
-                      <Label>Es cliente grupo (madre)</Label>
-                    </div>
-                    {!form.es_grupo && grupos.length > 0 && (
+                    {form.tipo_cliente !== 'grupo_originador' && (
+                      <div><Label>Linea de Credito</Label><Input type="number" value={form.linea_credito} onChange={e => setForm(f => ({ ...f, linea_credito: e.target.value }))} /></div>
+                    )}
+                    {form.tipo_cliente !== 'grupo_originador' && (
+                      <div className="flex items-center gap-3">
+                        <Switch checked={form.es_grupo} onCheckedChange={v => setForm(f => ({ ...f, es_grupo: v }))} />
+                        <Label>Es cliente grupo (madre)</Label>
+                      </div>
+                    )}
+                    {form.tipo_cliente !== 'grupo_originador' && !form.es_grupo && grupos.length > 0 && (
                       <div><Label>Grupo (opcional)</Label>
                         <Select value={form.parent_cliente_id || '__none__'} onValueChange={v => setForm(f => ({ ...f, parent_cliente_id: v === '__none__' ? '' : v }))}>
                           <SelectTrigger><SelectValue placeholder="Sin grupo" /></SelectTrigger>
@@ -207,6 +223,15 @@ export default function Clientes() {
             <SelectItem value="pesimo">Pésimo</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filterEstadoCredito} onValueChange={setFilterEstadoCredito}>
+          <SelectTrigger className="w-[170px]"><SelectValue placeholder="Estado crédito" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos estados</SelectItem>
+            <SelectItem value="activo">Activo</SelectItem>
+            <SelectItem value="riesgo">Riesgo</SelectItem>
+            <SelectItem value="buro">Buro</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="flex items-center gap-2">
           <Switch checked={showGrupos} onCheckedChange={setShowGrupos} />
           <Label className="text-sm">Vista grupos</Label>
@@ -237,6 +262,8 @@ export default function Clientes() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Link to={`/clientes/${k.cliente.id}`} className="font-medium text-primary hover:underline">{k.cliente.nombre}</Link>
+                        {k.cliente.estado_credito === 'buro' && <Badge className="bg-destructive/10 text-destructive border-destructive/20 text-xs">Buro</Badge>}
+                        {k.cliente.tipo_cliente === 'grupo_originador' && <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">Originador</Badge>}
                         {(k.cliente.es_grupo || subCount > 0) && <Badge variant="outline" className="text-xs"><Users className="mr-1 h-3 w-3" />{subCount}</Badge>}
                         {k.cliente.parent_cliente_id && <Badge variant="outline" className="text-xs">Sub</Badge>}
                       </div>
@@ -267,3 +294,4 @@ export default function Clientes() {
     </div>
   );
 }
+
