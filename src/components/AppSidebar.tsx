@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   CreditCard,
   LogOut,
+  Presentation,
 } from 'lucide-react';
 import {
   Sidebar,
@@ -35,6 +36,7 @@ export function AppSidebar() {
     ...(role === 'admin' ? [{ title: 'Asesores', url: '/asesores', icon: UserCheck }] : []),
     { title: 'Facturas', url: '/facturas', icon: FileText },
     { title: 'Alertas', url: '/alertas', icon: AlertTriangle },
+    { title: 'Vista Junta', url: '/vista-junta', icon: Presentation },
   ];
 
   return (

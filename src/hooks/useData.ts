@@ -13,6 +13,14 @@ export function useFacturas() {
   return useQuery({ queryKey: ['facturas'], queryFn: api.fetchFacturas });
 }
 
+export function useAllPagos() {
+  return useQuery({ queryKey: ['pagos', 'all'], queryFn: api.fetchAllPagos });
+}
+
+export function useAllPromesas() {
+  return useQuery({ queryKey: ['promesas_pago', 'all'], queryFn: api.fetchAllPromesas });
+}
+
 export function useCreateAsesor() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (data: { nombre: string; email: string }) => api.createAsesor(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['asesores'] }) });
@@ -30,12 +38,12 @@ export function useDeleteAsesor() {
 
 export function useCreateCliente() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { nombre: string; asesor_id: string | null; linea_credito: number }) => api.createCliente(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
+  return useMutation({ mutationFn: (data: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean }) => api.createCliente(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
 }
 
 export function useUpdateCliente() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: ({ id, ...data }: { id: string; nombre: string; asesor_id: string | null; linea_credito: number }) => api.updateCliente(id, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
+  return useMutation({ mutationFn: ({ id, ...data }: { id: string; nombre?: string; asesor_id?: string | null; linea_credito?: number; parent_cliente_id?: string | null; es_grupo?: boolean }) => api.updateCliente(id, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
 }
 
 export function useDeleteCliente() {
@@ -45,7 +53,7 @@ export function useDeleteCliente() {
 
 export function useCreateFactura() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string }) => api.createFactura(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
+  return useMutation({ mutationFn: (data: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string; numero_factura?: string }) => api.createFactura(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
 }
 
 export function useDeleteFactura() {
@@ -66,7 +74,7 @@ export function usePagosByCliente(clienteId: string) {
 export function useCreatePago() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { factura_id: string; monto: number; fecha_pago: string; metodo: string; referencia?: string; registrado_por?: string }) => api.createPago(data),
+    mutationFn: (data: { factura_id: string; monto: number; fecha_pago: string; referencia?: string; registrado_por?: string }) => api.createPago(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pagos'] });
       qc.invalidateQueries({ queryKey: ['facturas'] });
@@ -96,7 +104,10 @@ export function useCreatePromesaPago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { cliente_id: string; factura_id?: string; monto_prometido: number; fecha_promesa: string; notas?: string; registrado_por?: string }) => api.createPromesaPago(data),
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['promesas_pago', vars.cliente_id] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ['promesas_pago', vars.cliente_id] });
+      qc.invalidateQueries({ queryKey: ['promesas_pago', 'all'] });
+    },
   });
 }
 
@@ -104,6 +115,8 @@ export function useUpdatePromesaPago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string; estado: string }) => api.updatePromesaPago(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['promesas_pago'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['promesas_pago'] });
+    },
   });
 }

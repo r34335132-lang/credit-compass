@@ -1,4 +1,4 @@
-import { Cliente, Factura, Asesor, RiskLevel, ClienteKPI, AsesorKPI, Alerta } from '@/types';
+import { Cliente, Factura, Asesor, RiskLevel, ClienteKPI, AsesorKPI, Alerta, PromesaPago, PromesaKPI } from '@/types';
 import { differenceInDays, parseISO } from 'date-fns';
 
 export function getRiskLevel(dpd: number): RiskLevel {
@@ -26,11 +26,33 @@ export function getRiskColor(risk: RiskLevel): string {
   }
 }
 
-export function calcClienteKPI(cliente: Cliente, facturas: Factura[]): ClienteKPI {
+export function calcClienteKPI(cliente: Cliente, facturas: Factura[], allPagos?: { factura_id: string; monto: number }[]): ClienteKPI {
   const clienteFacturas = facturas.filter(f => f.cliente_id === cliente.id);
   const totalFacturado = clienteFacturas.reduce((s, f) => s + f.monto, 0);
-  const vencidas = clienteFacturas.filter(f => f.estado === 'vencida');
-  const montoVencido = vencidas.reduce((s, f) => s + f.monto, 0);
+  
+  // Monto vencido: facturas vencidas O parciales que pasaron fecha_vencimiento
+  const today = new Date();
+  const vencidasOParciales = clienteFacturas.filter(f => 
+    f.estado === 'vencida' || 
+    (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) ||
+    (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
+  );
+  const montoVencido = vencidasOParciales.reduce((s, f) => {
+    if (allPagos) {
+      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
+      return s + Math.max(0, f.monto - pagado);
+    }
+    return s + f.monto;
+  }, 0);
+
+  // Saldo pendiente: todas las facturas no pagadas completamente
+  const saldoPendiente = clienteFacturas.filter(f => f.estado !== 'pagada').reduce((s, f) => {
+    if (allPagos) {
+      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
+      return s + Math.max(0, f.monto - pagado);
+    }
+    return s + f.monto;
+  }, 0);
   
   const pagadas = clienteFacturas.filter(f => f.estado === 'pagada' && f.fecha_pago);
   const pagadasATiempo = pagadas.filter(f => {
@@ -43,13 +65,15 @@ export function calcClienteKPI(cliente: Cliente, facturas: Factura[]): ClienteKP
     ? (pagadasATiempo.length / pagadas.length) * 100 
     : 100;
 
-  // DPD: average days past due for all non-timely invoices
-  const today = new Date();
+  // DPD: average days past due for non-timely invoices
   const atrasadas = clienteFacturas.filter(f => {
     if (f.estado === 'pagada' && f.fecha_pago) {
       return differenceInDays(parseISO(f.fecha_pago), parseISO(f.fecha_vencimiento)) > 0;
     }
-    if (f.estado === 'vencida') {
+    if (f.estado === 'vencida' || (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)) {
+      return true;
+    }
+    if (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) {
       return true;
     }
     return false;
@@ -67,22 +91,39 @@ export function calcClienteKPI(cliente: Cliente, facturas: Factura[]): ClienteKP
   }
 
   const frecuenciaAtraso = clienteFacturas.length > 0 
-    ? (vencidas.length / clienteFacturas.length) * 100 
+    ? (atrasadas.length / clienteFacturas.length) * 100 
     : 0;
 
+  // Uso de línea: solo facturas NO pagadas (saldo pendiente)
   const usoLinea = cliente.linea_credito > 0 
-    ? (totalFacturado / cliente.linea_credito) * 100 
+    ? (saldoPendiente / cliente.linea_credito) * 100 
     : 0;
 
   return {
     cliente,
     totalFacturado,
     montoVencido,
+    saldoPendiente,
     porcentajePagoATiempo,
     dpd,
     frecuenciaAtraso,
     riesgo: getRiskLevel(dpd),
     usoLinea,
+  };
+}
+
+export function calcPromesaKPI(promesas: PromesaPago[]): PromesaKPI {
+  const total = promesas.length;
+  const cumplidas = promesas.filter(p => p.estado === 'cumplida').length;
+  const incumplidas = promesas.filter(p => p.estado === 'incumplida').length;
+  const pendientes = promesas.filter(p => p.estado === 'pendiente').length;
+  const cerradas = cumplidas + incumplidas;
+  return {
+    total,
+    cumplidas,
+    incumplidas,
+    pendientes,
+    porcentajeCumplimiento: cerradas > 0 ? (cumplidas / cerradas) * 100 : 0,
   };
 }
 
@@ -92,7 +133,13 @@ export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Fac
   const asesorFacturas = facturas.filter(f => clienteIds.has(f.cliente_id));
   
   const totalCartera = asesorFacturas.reduce((s, f) => s + f.monto, 0);
-  const montoVencido = asesorFacturas.filter(f => f.estado === 'vencida').reduce((s, f) => s + f.monto, 0);
+  
+  const today = new Date();
+  const montoVencido = asesorFacturas.filter(f => 
+    f.estado === 'vencida' || 
+    (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) ||
+    (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
+  ).reduce((s, f) => s + f.monto, 0);
   
   const clienteKPIs = asesorClientes.map(c => calcClienteKPI(c, facturas));
   const promedioDPD = clienteKPIs.length > 0 

@@ -12,6 +12,7 @@ import Asesores from "@/pages/Asesores";
 import AsesorDetalle from "@/pages/AsesorDetalle";
 import Facturas from "@/pages/Facturas";
 import Alertas from "@/pages/Alertas";
+import VistaJunta from "@/pages/VistaJunta";
 import Auth from "@/pages/Auth";
 import NotFound from "./pages/NotFound";
 import { Loader2 } from "lucide-react";
@@ -35,6 +36,7 @@ const AppRoutes = () => (
     <Route path="/asesores/:id" element={<ProtectedRoute><AppLayout><AsesorDetalle /></AppLayout></ProtectedRoute>} />
     <Route path="/facturas" element={<ProtectedRoute><AppLayout><Facturas /></AppLayout></ProtectedRoute>} />
     <Route path="/alertas" element={<ProtectedRoute><AppLayout><Alertas /></AppLayout></ProtectedRoute>} />
+    <Route path="/vista-junta" element={<ProtectedRoute><AppLayout><VistaJunta /></AppLayout></ProtectedRoute>} />
     <Route path="*" element={<NotFound />} />
   </Routes>
 );

@@ -1,13 +1,14 @@
 import { useMemo } from 'react';
-import { useClientes, useAsesores, useFacturas } from '@/hooks/useData';
-import { calcClienteKPI, calcAsesorKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
+import { useClientes, useAsesores, useFacturas, useAllPromesas } from '@/hooks/useData';
+import { calcClienteKPI, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
 import { KPICard } from '@/components/KPICard';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { DollarSign, AlertTriangle, Users, TrendingDown, FileText, Clock } from 'lucide-react';
+import { DollarSign, AlertTriangle, Users, TrendingDown, Clock, Handshake, Presentation } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { RiskLevel } from '@/types';
 
@@ -22,6 +23,7 @@ export default function Dashboard() {
   const { data: clientes, isLoading: loadingC } = useClientes();
   const { data: asesores, isLoading: loadingA } = useAsesores();
   const { data: facturas, isLoading: loadingF } = useFacturas();
+  const { data: allPromesas = [] } = useAllPromesas();
 
   const isLoading = loadingC || loadingA || loadingF;
 
@@ -31,10 +33,10 @@ export default function Dashboard() {
     const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
     const asesorKPIs = asesores.map(a => calcAsesorKPI(a, clientes, facturas));
     const alertas = generateAlertas(clientes, asesores, facturas);
+    const promesaKPI = calcPromesaKPI(allPromesas);
 
     const totalCartera = facturas.reduce((s, f) => s + f.monto, 0);
-    const montoVencido = facturas.filter(f => f.estado === 'vencida').reduce((s, f) => s + f.monto, 0);
-    const montoCorriente = totalCartera - montoVencido;
+    const montoVencido = clienteKPIs.reduce((s, k) => s + k.montoVencido, 0);
 
     // Risk distribution
     const riskDist = { bueno: 0, malo: 0, muy_malo: 0, pesimo: 0 };
@@ -54,20 +56,35 @@ export default function Dashboard() {
       vencido: a.montoVencido,
     }));
 
+    // Top 15 clients by overdue amount
+    const top15Deudores = [...clienteKPIs]
+      .sort((a, b) => b.montoVencido - a.montoVencido)
+      .slice(0, 15)
+      .filter(k => k.montoVencido > 0)
+      .map(k => ({
+        name: k.cliente.nombre.length > 15 ? k.cliente.nombre.substring(0, 15) + '…' : k.cliente.nombre,
+        fullName: k.cliente.nombre,
+        facturado: k.totalFacturado,
+        vencido: k.montoVencido,
+        dpd: k.dpd,
+        id: k.cliente.id,
+      }));
+
     return {
       clienteKPIs,
       asesorKPIs,
       alertas,
+      promesaKPI,
       totalCartera,
       montoVencido,
-      montoCorriente,
       riskChartData,
       asesorChartData,
+      top15Deudores,
       totalClientes: clientes.length,
       totalFacturas: facturas.length,
       promedioDPD: clienteKPIs.length > 0 ? Math.round(clienteKPIs.reduce((s, k) => s + k.dpd, 0) / clienteKPIs.length) : 0,
     };
-  }, [clientes, asesores, facturas]);
+  }, [clientes, asesores, facturas, allPromesas]);
 
   if (isLoading) {
     return (
@@ -84,49 +101,29 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">Resumen de cartera y riesgo crediticio</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <p className="text-muted-foreground">Resumen de cartera y riesgo crediticio</p>
+        </div>
+        <Link to="/vista-junta">
+          <Button variant="outline"><Presentation className="mr-2 h-4 w-4" />Vista Junta</Button>
+        </Link>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <KPICard
-          title="Cartera Total"
-          value={formatCurrency(kpis.totalCartera)}
-          subtitle={`${kpis.totalFacturas} facturas`}
-          icon={DollarSign}
-        />
-        <KPICard
-          title="Monto Vencido"
-          value={formatCurrency(kpis.montoVencido)}
-          subtitle={formatPercent(kpis.totalCartera > 0 ? (kpis.montoVencido / kpis.totalCartera) * 100 : 0)}
-          icon={TrendingDown}
-          variant="danger"
-        />
-        <KPICard
-          title="Clientes"
-          value={String(kpis.totalClientes)}
-          subtitle={`${kpis.alertas.length} en riesgo`}
-          icon={Users}
-          variant={kpis.alertas.length > 0 ? 'warning' : 'good'}
-        />
-        <KPICard
-          title="DPD Promedio"
-          value={`${kpis.promedioDPD} días`}
-          subtitle="Días promedio de atraso"
-          icon={Clock}
-          variant={kpis.promedioDPD > 5 ? 'danger' : kpis.promedioDPD > 2 ? 'warning' : 'good'}
-        />
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <KPICard title="Cartera Total" value={formatCurrency(kpis.totalCartera)} subtitle={`${kpis.totalFacturas} facturas`} icon={DollarSign} />
+        <KPICard title="Monto Vencido" value={formatCurrency(kpis.montoVencido)} subtitle={formatPercent(kpis.totalCartera > 0 ? (kpis.montoVencido / kpis.totalCartera) * 100 : 0)} icon={TrendingDown} variant="danger" />
+        <KPICard title="Clientes" value={String(kpis.totalClientes)} subtitle={`${kpis.alertas.length} en riesgo`} icon={Users} variant={kpis.alertas.length > 0 ? 'warning' : 'good'} />
+        <KPICard title="DPD Promedio" value={`${kpis.promedioDPD} días`} subtitle="Días promedio de atraso" icon={Clock} variant={kpis.promedioDPD > 5 ? 'danger' : kpis.promedioDPD > 2 ? 'warning' : 'good'} />
+        <KPICard title="Promesas" value={`${kpis.promesaKPI.cumplidas}/${kpis.promesaKPI.total}`} subtitle={`${formatPercent(kpis.promesaKPI.porcentajeCumplimiento)} cumplimiento`} icon={Handshake} variant={kpis.promesaKPI.porcentajeCumplimiento < 50 ? 'danger' : 'good'} />
       </div>
 
       {/* Charts row */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Cartera vencida vs corriente */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Desempeño por Asesor</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Desempeño por Asesor</CardTitle></CardHeader>
           <CardContent>
             {kpis.asesorChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
@@ -145,19 +142,14 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Risk distribution */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Distribución de Riesgo</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Distribución de Riesgo</CardTitle></CardHeader>
           <CardContent>
             {kpis.riskChartData.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie data={kpis.riskChartData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
-                    {kpis.riskChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
+                    {kpis.riskChartData.map((entry, i) => (<Cell key={i} fill={entry.fill} />))}
                   </Pie>
                   <Tooltip />
                   <Legend />
@@ -169,6 +161,28 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Top 15 Deudores Chart */}
+      {kpis.top15Deudores.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle className="text-base">Top 15 Clientes con Mayor Deuda</CardTitle></CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={kpis.top15Deudores} layout="vertical" margin={{ left: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                <XAxis type="number" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={(name) => {
+                  const item = kpis.top15Deudores.find(d => d.name === name);
+                  return item ? `${item.fullName} (DPD: ${item.dpd}d)` : name;
+                }} />
+                <Bar dataKey="facturado" name="Facturado" fill="hsl(210, 100%, 45%)" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="vencido" name="Vencido" fill="hsl(0, 75%, 55%)" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Alerts */}
       {kpis.alertas.length > 0 && (
@@ -196,9 +210,7 @@ export default function Dashboard() {
 
       {/* Top clients table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Clientes - Resumen</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-base">Clientes - Resumen</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
@@ -215,9 +227,7 @@ export default function Dashboard() {
               {kpis.clienteKPIs.length > 0 ? kpis.clienteKPIs.map((k) => (
                 <TableRow key={k.cliente.id}>
                   <TableCell>
-                    <Link to={`/clientes/${k.cliente.id}`} className="font-medium text-primary hover:underline">
-                      {k.cliente.nombre}
-                    </Link>
+                    <Link to={`/clientes/${k.cliente.id}`} className="font-medium text-primary hover:underline">{k.cliente.nombre}</Link>
                   </TableCell>
                   <TableCell><RiskBadge risk={k.riesgo} dpd={k.dpd} size="sm" /></TableCell>
                   <TableCell className="text-right tabular-nums">{formatCurrency(k.totalFacturado)}</TableCell>
