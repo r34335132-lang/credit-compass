@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useClientes, useAsesores, useFacturas, useAllPromesas } from '@/hooks/useData';
-import { calcClienteKPI, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
+import { getClienteOrGrupoKPI, calcAsesorKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
 import { KPICard } from '@/components/KPICard';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,15 +30,19 @@ export default function Dashboard() {
   const kpis = useMemo(() => {
     if (!clientes || !asesores || !facturas) return null;
     
-    const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
+    // Use consolidated KPIs for groups, exclude sub-clients whose parent group is visible
+    const groupIds = new Set(clientes.filter(c => c.es_grupo || c.tipo_cliente === 'grupo_originador').map(c => c.id));
+    const topLevelClientes = clientes.filter(c => !c.parent_cliente_id || !groupIds.has(c.parent_cliente_id));
+    const clienteKPIs = topLevelClientes.map(c => getClienteOrGrupoKPI(c, clientes, facturas));
     const asesorKPIs = asesores.map(a => calcAsesorKPI(a, clientes, facturas));
     const alertas = generateAlertas(clientes, asesores, facturas);
     const promesaKPI = calcPromesaKPI(allPromesas);
 
+    // Total cartera/vencido from raw invoices (avoids double-counting)
     const totalCartera = facturas.reduce((s, f) => s + f.monto, 0);
     const montoVencido = clienteKPIs.reduce((s, k) => s + k.montoVencido, 0);
 
-    // Risk distribution
+    // Risk distribution (top-level only, with consolidated group KPIs)
     const riskDist = { bueno: 0, malo: 0, muy_malo: 0, pesimo: 0 };
     clienteKPIs.forEach(k => riskDist[k.riesgo]++);
 

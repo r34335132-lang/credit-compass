@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useClientes, useAsesores, useCreateCliente, useDeleteCliente, useUpdateCliente, useFacturas } from '@/hooks/useData';
-import { calcClienteKPI, calcGrupoKPI, formatCurrency, formatPercent } from '@/lib/kpi';
+import { getClienteOrGrupoKPI, formatCurrency, formatPercent } from '@/lib/kpi';
 import { RiskBadge } from '@/components/RiskBadge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -37,7 +37,7 @@ export default function Clientes() {
   const [form, setForm] = useState({ nombre: '', asesor_id: '', linea_credito: '', es_grupo: false, parent_cliente_id: '', tipo_cliente: 'normal' as 'normal' | 'grupo_originador' });
   const [grupoForm, setGrupoForm] = useState({ cliente_id: '', parent_cliente_id: '' });
 
-  const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
+  const clienteKPIs = clientes.map(c => getClienteOrGrupoKPI(c, clientes, facturas));
 
   // Filter logic: in group mode, show only parent groups with consolidated KPIs
   const grupos = clientes.filter(c => c.es_grupo || clientes.some(sc => sc.parent_cliente_id === c.id));

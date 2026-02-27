@@ -26,8 +26,10 @@ export function getRiskColor(risk: RiskLevel): string {
   }
 }
 
-export function calcClienteKPI(cliente: Cliente, facturas: Factura[], allPagos?: { factura_id: string; monto: number }[]): ClienteKPI {
-  const clienteFacturas = facturas.filter(f => f.cliente_id === cliente.id);
+export function calcClienteKPI(cliente: Cliente, facturas: Factura[], allPagos?: { factura_id: string; monto: number }[], _usePrefiltered?: boolean): ClienteKPI {
+  // When called from getClienteOrGrupoKPI with consolidated invoices, _usePrefiltered=true
+  // skips the client filter so all passed invoices are used.
+  const clienteFacturas = _usePrefiltered ? facturas : facturas.filter(f => f.cliente_id === cliente.id);
   const totalFacturado = clienteFacturas.reduce((s, f) => s + f.monto, 0);
   
   // Monto vencido: facturas vencidas O parciales que pasaron fecha_vencimiento
@@ -112,6 +114,38 @@ export function calcClienteKPI(cliente: Cliente, facturas: Factura[], allPagos?:
   };
 }
 
+/**
+ * Auto-detects whether a client is a grupo originador and returns consolidated
+ * KPIs (summing sub-client invoices) or individual KPIs accordingly.
+ * This is the primary helper all views should use instead of calling calcClienteKPI directly.
+ */
+export function getClienteOrGrupoKPI(
+  cliente: Cliente,
+  allClientes: Cliente[],
+  facturas: Factura[],
+  allPagos?: { factura_id: string; monto: number }[]
+): ClienteKPI {
+  const isGrupo = cliente.es_grupo || cliente.tipo_cliente === 'grupo_originador';
+  const subClientes = allClientes.filter(c => c.parent_cliente_id === cliente.id);
+
+  if (isGrupo && subClientes.length > 0) {
+    // Consolidate invoices from the group + all sub-clients
+    const allGroupIds = new Set([cliente.id, ...subClientes.map(c => c.id)]);
+    const groupFacturas = facturas.filter(f => allGroupIds.has(f.cliente_id));
+
+    // Calculate KPI using the consolidated invoices, skip re-filtering by cliente.id
+    const kpi = calcClienteKPI(cliente, groupFacturas, allPagos, true);
+
+    // Consolidated credit line from group + sub-clients
+    const totalLinea = [cliente, ...subClientes].reduce((s, c) => s + c.linea_credito, 0);
+    const usoLinea = totalLinea > 0 ? (kpi.saldoPendiente / totalLinea) * 100 : 0;
+
+    return { ...kpi, usoLinea };
+  }
+
+  return calcClienteKPI(cliente, facturas, allPagos);
+}
+
 export function calcGrupoKPI(grupo: Cliente, clientes: Cliente[], facturas: Factura[], allPagos?: { factura_id: string; monto: number }[]): GrupoKPI {
   const subClientes = clientes.filter(c => c.parent_cliente_id === grupo.id);
   const allGroupClients = [grupo, ...subClientes];
@@ -192,14 +226,19 @@ export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Fac
     (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
   ).reduce((s, f) => s + f.monto, 0);
   
-  // Behavioral KPIs: only activo + riesgo clients
-  const behavioralClients = asesorClientes.filter(c => c.estado_credito !== 'buro');
-  const behavioralKPIs = behavioralClients.map(c => calcClienteKPI(c, facturas));
+  // For behavioral KPIs and risk, use consolidated KPIs to avoid groups showing $0
+  // Filter out sub-clients whose parent group is also in the asesor's list to avoid double-counting
+  const groupIds = new Set(asesorClientes.filter(c => c.es_grupo || c.tipo_cliente === 'grupo_originador').map(c => c.id));
+  const topLevelClientes = asesorClientes.filter(c => !c.parent_cliente_id || !groupIds.has(c.parent_cliente_id));
+  
+  // Behavioral KPIs: only activo + riesgo, using consolidated KPIs for groups
+  const behavioralClients = topLevelClientes.filter(c => c.estado_credito !== 'buro');
+  const behavioralKPIs = behavioralClients.map(c => getClienteOrGrupoKPI(c, clientes, facturas));
   const promedioDPD = behavioralKPIs.length > 0 
     ? Math.round(behavioralKPIs.reduce((s, k) => s + k.dpd, 0) / behavioralKPIs.length) 
     : 0;
   
-  const allKPIs = asesorClientes.map(c => calcClienteKPI(c, facturas));
+  const allKPIs = topLevelClientes.map(c => getClienteOrGrupoKPI(c, clientes, facturas));
   const clientesEnRiesgo = allKPIs.filter(k => k.riesgo === 'muy_malo' || k.riesgo === 'pesimo').length;
 
   return {
