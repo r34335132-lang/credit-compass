@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Trash2, Download, Users } from 'lucide-react';
@@ -70,7 +70,7 @@ export default function Clientes() {
         asesor_id: form.asesor_id || null,
         linea_credito: Number(form.linea_credito) || 0,
         es_grupo: form.es_grupo,
-        parent_cliente_id: form.parent_cliente_id || null,
+        parent_cliente_id: form.parent_cliente_id && form.parent_cliente_id !== '__none__' ? form.parent_cliente_id : null,
       });
       toast.success('Cliente creado');
       setDialogOpen(false);
@@ -106,18 +106,31 @@ export default function Clientes() {
                   <Button variant="outline"><Users className="mr-2 h-4 w-4" />Asignar Grupo</Button>
                 </DialogTrigger>
                 <DialogContent>
-                  <DialogHeader><DialogTitle>Asignar Cliente a Grupo</DialogTitle></DialogHeader>
+                  <DialogHeader>
+                    <DialogTitle>Asignar Cliente a Grupo</DialogTitle>
+                    <DialogDescription>Selecciona un cliente y el grupo al que deseas asignarlo.</DialogDescription>
+                  </DialogHeader>
                   <div className="space-y-4">
                     <div><Label>Cliente</Label>
                       <Select value={grupoForm.cliente_id} onValueChange={v => setGrupoForm(f => ({ ...f, cliente_id: v }))}>
                         <SelectTrigger><SelectValue placeholder="Seleccionar cliente" /></SelectTrigger>
-                        <SelectContent>{clientes.filter(c => !c.es_grupo).map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          {clientes.filter(c => !c.es_grupo).length > 0
+                            ? clientes.filter(c => !c.es_grupo).map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)
+                            : <p className="py-4 text-center text-sm text-muted-foreground">No hay clientes disponibles</p>
+                          }
+                        </SelectContent>
                       </Select>
                     </div>
                     <div><Label>Grupo (cliente madre)</Label>
                       <Select value={grupoForm.parent_cliente_id} onValueChange={v => setGrupoForm(f => ({ ...f, parent_cliente_id: v }))}>
                         <SelectTrigger><SelectValue placeholder="Seleccionar grupo" /></SelectTrigger>
-                        <SelectContent>{clientes.filter(c => c.es_grupo || clientes.some(sc => sc.parent_cliente_id === c.id)).map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          {grupos.length > 0
+                            ? grupos.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)
+                            : <p className="py-4 text-center text-sm text-muted-foreground">No hay grupos disponibles</p>
+                          }
+                        </SelectContent>
                       </Select>
                     </div>
                     <Button className="w-full" onClick={handleAssignGrupo}>Asignar</Button>
@@ -129,26 +142,34 @@ export default function Clientes() {
                   <Button><Plus className="mr-2 h-4 w-4" />Nuevo Cliente</Button>
                 </DialogTrigger>
                 <DialogContent>
-                  <DialogHeader><DialogTitle>Nuevo Cliente</DialogTitle></DialogHeader>
+                  <DialogHeader>
+                    <DialogTitle>Nuevo Cliente</DialogTitle>
+                    <DialogDescription>Completa los datos del nuevo cliente.</DialogDescription>
+                  </DialogHeader>
                   <div className="space-y-4">
                     <div><Label>Nombre</Label><Input value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} /></div>
                     <div><Label>Asesor</Label>
                       <Select value={form.asesor_id} onValueChange={v => setForm(f => ({ ...f, asesor_id: v }))}>
                         <SelectTrigger><SelectValue placeholder="Seleccionar asesor" /></SelectTrigger>
-                        <SelectContent>{asesores.map(a => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)}</SelectContent>
+                        <SelectContent>
+                          {asesores.length > 0
+                            ? asesores.map(a => <SelectItem key={a.id} value={a.id}>{a.nombre}</SelectItem>)
+                            : <p className="py-4 text-center text-sm text-muted-foreground">No hay asesores registrados</p>
+                          }
+                        </SelectContent>
                       </Select>
                     </div>
-                    <div><Label>Línea de Crédito</Label><Input type="number" value={form.linea_credito} onChange={e => setForm(f => ({ ...f, linea_credito: e.target.value }))} /></div>
+                    <div><Label>Linea de Credito</Label><Input type="number" value={form.linea_credito} onChange={e => setForm(f => ({ ...f, linea_credito: e.target.value }))} /></div>
                     <div className="flex items-center gap-3">
                       <Switch checked={form.es_grupo} onCheckedChange={v => setForm(f => ({ ...f, es_grupo: v }))} />
                       <Label>Es cliente grupo (madre)</Label>
                     </div>
                     {!form.es_grupo && grupos.length > 0 && (
                       <div><Label>Grupo (opcional)</Label>
-                        <Select value={form.parent_cliente_id} onValueChange={v => setForm(f => ({ ...f, parent_cliente_id: v }))}>
+                        <Select value={form.parent_cliente_id || '__none__'} onValueChange={v => setForm(f => ({ ...f, parent_cliente_id: v === '__none__' ? '' : v }))}>
                           <SelectTrigger><SelectValue placeholder="Sin grupo" /></SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">Sin grupo</SelectItem>
+                            <SelectItem value="__none__">Sin grupo</SelectItem>
                             {grupos.map(g => <SelectItem key={g.id} value={g.id}>{g.nombre}</SelectItem>)}
                           </SelectContent>
                         </Select>
