@@ -115,6 +115,17 @@ export async function createPago(pago: { factura_id: string; monto: number; fech
   return data;
 }
 
+export async function updatePago(id: string, data: { monto?: number; fecha_pago?: string; referencia?: string }) {
+  const { data: result, error } = await supabase.from('pagos').update(data).eq('id', id).select().single();
+  if (error) throw error;
+  return result;
+}
+
+export async function deletePago(id: string) {
+  const { error } = await supabase.from('pagos').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // Notas de cobranza
 export async function fetchNotasCobranza(clienteId: string): Promise<NotaCobranza[]> {
   const { data, error } = await supabase.from('notas_cobranza').select('*').eq('cliente_id', clienteId).order('created_at', { ascending: false });

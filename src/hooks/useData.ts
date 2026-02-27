@@ -82,6 +82,28 @@ export function useCreatePago() {
   });
 }
 
+export function useUpdatePago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; monto?: number; fecha_pago?: string; referencia?: string }) => api.updatePago(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos'] });
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+    },
+  });
+}
+
+export function useDeletePago() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.deletePago,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pagos'] });
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+    },
+  });
+}
+
 // Notas de cobranza
 export function useNotasCobranza(clienteId: string) {
   return useQuery({ queryKey: ['notas_cobranza', clienteId], queryFn: () => api.fetchNotasCobranza(clienteId), enabled: !!clienteId });
