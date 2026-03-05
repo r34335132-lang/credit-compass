@@ -38,6 +38,7 @@ export function calcClienteKPI(cliente: Cliente, facturas: Factura[], allPagos?:
     (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) ||
     (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
   );
+  
   const montoVencido = vencidasOParciales.reduce((s, f) => {
     if (allPagos) {
       const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
@@ -138,6 +139,7 @@ export function getClienteKPIEffective(
   const totalLinea = allGroupClients.reduce((s, c) => s + c.linea_credito, 0);
   const virtualCliente: Cliente = { ...cliente, linea_credito: totalLinea };
 
+  // Ahora el cálculo de DPD y facturas evalúa la cartera en su conjunto para todos los IDs
   return calcClienteKPI(virtualCliente, facturas, allPagos, allGroupIds);
 }
 
@@ -145,49 +147,30 @@ export function calcGrupoKPI(grupo: Cliente, clientes: Cliente[], facturas: Fact
   const subClientes = clientes.filter(c => c.parent_cliente_id === grupo.id);
   const allGroupClients = [grupo, ...subClientes];
   const allGroupIds = allGroupClients.map(c => c.id);
-  const groupFacturas = facturas.filter(f => allGroupIds.includes(f.cliente_id));
-
-  // Monetary KPIs: ALL clients (including buro)
-  const totalFacturado = groupFacturas.reduce((s, f) => s + f.monto, 0);
-  const today = new Date();
-  const montoVencido = groupFacturas.filter(f =>
-    f.estado === 'vencida' ||
-    (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) ||
-    (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
-  ).reduce((s, f) => {
-    if (allPagos) {
-      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
-      return s + Math.max(0, f.monto - pagado);
-    }
-    return s + f.monto;
-  }, 0);
-
-  // Behavioral KPIs: only activo + riesgo clients
-  const behavioralClients = allGroupClients.filter(c => c.estado_credito !== 'buro');
-  const behavioralKPIs = behavioralClients.map(c => calcClienteKPI(c, facturas, allPagos));
-  const promedioDPD = behavioralKPIs.length > 0
-    ? Math.round(behavioralKPIs.reduce((s, k) => s + k.dpd, 0) / behavioralKPIs.length)
-    : 0;
-
-  // Uso de linea consolidated
+  
+  // Consolidar límites de crédito para uso total de la línea
   const totalLinea = allGroupClients.reduce((s, c) => s + c.linea_credito, 0);
-  const totalSaldoPendiente = groupFacturas.filter(f => f.estado !== 'pagada').reduce((s, f) => {
-    if (allPagos) {
-      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
-      return s + Math.max(0, f.monto - pagado);
-    }
-    return s + f.monto;
-  }, 0);
-  const usoLinea = totalLinea > 0 ? (totalSaldoPendiente / totalLinea) * 100 : 0;
+  const virtualCliente: Cliente = { ...grupo, linea_credito: totalLinea };
+
+  // KPIs Monetarios (contempla todos los IDs, incluso buró)
+  const kpiMonetario = calcClienteKPI(virtualCliente, facturas, allPagos, allGroupIds);
+
+  // KPIs de comportamiento/DPD (excluyendo miembros en buró si aplica, sino analiza a todos los activos/riesgo en un solo pool)
+  const behavioralIds = allGroupClients.filter(c => c.estado_credito !== 'buro').map(c => c.id);
+  
+  // Si no hay clientes activos (todos buró), caemos de vuelta al análisis monetario total
+  const kpiComportamiento = behavioralIds.length > 0 
+    ? calcClienteKPI(virtualCliente, facturas, allPagos, behavioralIds)
+    : kpiMonetario;
 
   return {
     grupo,
     subClientes,
-    totalFacturado,
-    montoVencido,
-    promedioDPD,
-    riesgo: getRiskLevel(promedioDPD),
-    usoLinea,
+    totalFacturado: kpiMonetario.totalFacturado,
+    montoVencido: kpiMonetario.montoVencido,
+    promedioDPD: kpiComportamiento.dpd,
+    riesgo: getRiskLevel(kpiComportamiento.dpd),
+    usoLinea: kpiMonetario.usoLinea,
   };
 }
 
