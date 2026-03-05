@@ -56,6 +56,15 @@ export function useCreateFactura() {
   return useMutation({ mutationFn: (data: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string; numero_factura?: string }) => api.createFactura(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
 }
 
+export function useUpdateFactura() {
+  const qc = useQueryClient();
+  return useMutation({ 
+    mutationFn: ({ id, ...data }: { id: string; monto?: number; fecha_vencimiento?: string; estado?: string }) => 
+      api.updateFactura(id, data), 
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) 
+  });
+}
+
 export function useDeleteFactura() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: api.deleteFactura, onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
@@ -159,4 +168,3 @@ export function useUpdateClienteEstadoCredito() {
     },
   });
 }
-
