@@ -13,23 +13,31 @@ export default function VistaJunta() {
   const { data: asesores = [] } = useAsesores();
   const { data: facturas = [] } = useFacturas();
   const { data: allPromesas = [] } = useAllPromesas();
-  // Se añade la consulta de pagos para considerar abonos parciales
   const { data: allPagos = [] } = useAllPagos();
 
   const data = useMemo(() => {
-    // Se pasa 'allPagos' a los cálculos de KPI y Alertas para descontar abonos
+    if (!clientes.length || !facturas.length) {
+      return { 
+        totalCartera: 0, 
+        montoVencido: 0, 
+        promedioDPD: 0, 
+        alertas: [], 
+        promesaKPI: { cumplidas: 0, total: 0, porcentajeCumplimiento: 0 }, 
+        top15: [], 
+        totalClientes: clientes.length 
+      };
+    }
+
     const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas, allPagos));
     const alertas = generateAlertas(clientes, asesores, facturas, allPagos);
     const promesaKPI = calcPromesaKPI(allPromesas);
-
-    // Cálculo de Cartera Total real (Facturado menos Pagado/Abonado)
+    
     const totalFacturado = facturas.reduce((s, f) => s + f.monto, 0);
     const totalPagado = allPagos.reduce((s, p) => s + Number(p.monto), 0);
-    const totalCartera = totalFacturado - totalPagado;
+    const totalCartera = Math.max(0, totalFacturado - totalPagado);
 
-    // El monto vencido ya viene neto desde calcClienteKPI gracias a allPagos
     const montoVencido = clienteKPIs.reduce((s, k) => s + k.montoVencido, 0);
-    const promedioDPD = clienteKPIs.length > 0 ? Math.round(clienteKPIs.reduce((s, k) => s + k.dpd, 0) / clienteKPIs.length) : 0;
+    const promedioDPD = Math.round(clienteKPIs.reduce((s, k) => s + k.dpd, 0) / clienteKPIs.length);
 
     const top15 = [...clienteKPIs]
       .sort((a, b) => b.montoVencido - a.montoVencido)
@@ -49,7 +57,6 @@ export default function VistaJunta() {
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-8">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link to="/"><Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button></Link>
@@ -60,88 +67,75 @@ export default function VistaJunta() {
         </div>
       </div>
 
-      {/* Big KPIs */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
-        <Card className="border-2">
-          <CardContent className="pt-6 text-center">
-            <DollarSign className="mx-auto h-8 w-8 text-primary mb-2" />
-            <p className="text-4xl font-bold tabular-nums">{formatCurrency(data.totalCartera)}</p>
-            <p className="text-sm text-muted-foreground mt-1">Cartera Total</p>
+      {/* Ajuste de Grid y tipografía para evitar desbordes */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card className="border-2 overflow-hidden">
+          <CardContent className="pt-6 text-center px-2">
+            <DollarSign className="mx-auto h-6 w-6 text-primary mb-2" />
+            <p className="text-2xl xl:text-3xl font-bold tabular-nums truncate">
+              {formatCurrency(data.totalCartera)}
+            </p>
+            <p className="text-xs font-medium text-muted-foreground mt-1 uppercase tracking-wider">Cartera Total</p>
           </CardContent>
         </Card>
-        <Card className="border-2 border-risk-critical/30">
-          <CardContent className="pt-6 text-center">
-            <TrendingDown className="mx-auto h-8 w-8 text-risk-critical mb-2" />
-            <p className="text-4xl font-bold tabular-nums text-risk-critical">{formatCurrency(data.montoVencido)}</p>
-            <p className="text-sm text-muted-foreground mt-1">Monto Vencido</p>
-            <p className="text-xs text-muted-foreground">{formatPercent(data.totalCartera > 0 ? (data.montoVencido / data.totalCartera) * 100 : 0)} de cartera</p>
+
+        <Card className="border-2 border-risk-critical/30 overflow-hidden">
+          <CardContent className="pt-6 text-center px-2">
+            <TrendingDown className="mx-auto h-6 w-6 text-risk-critical mb-2" />
+            <p className="text-2xl xl:text-3xl font-bold tabular-nums text-risk-critical truncate">
+              {formatCurrency(data.montoVencido)}
+            </p>
+            <p className="text-xs font-medium text-muted-foreground mt-1 uppercase tracking-wider">Monto Vencido</p>
+            <p className="text-[10px] text-muted-foreground">
+              {formatPercent(data.totalCartera > 0 ? (data.montoVencido / data.totalCartera) * 100 : 0)} del total
+            </p>
           </CardContent>
         </Card>
-        <Card className="border-2">
-          <CardContent className="pt-6 text-center">
-            <Clock className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
-            <p className="text-4xl font-bold tabular-nums">{data.promedioDPD}d</p>
-            <p className="text-sm text-muted-foreground mt-1">DPD Promedio</p>
+
+        <Card className="border-2 overflow-hidden">
+          <CardContent className="pt-6 text-center px-2">
+            <Clock className="mx-auto h-6 w-6 text-muted-foreground mb-2" />
+            <p className="text-2xl xl:text-3xl font-bold tabular-nums truncate">{data.promedioDPD}d</p>
+            <p className="text-xs font-medium text-muted-foreground mt-1 uppercase tracking-wider">DPD Promedio</p>
           </CardContent>
         </Card>
-        <Card className="border-2">
-          <CardContent className="pt-6 text-center">
-            <AlertTriangle className="mx-auto h-8 w-8 text-risk-bad mb-2" />
-            <p className="text-4xl font-bold tabular-nums">{data.alertas.length}</p>
-            <p className="text-sm text-muted-foreground mt-1">Alertas Activas</p>
-            <p className="text-xs text-muted-foreground">de {data.totalClientes} clientes</p>
+
+        <Card className="border-2 overflow-hidden">
+          <CardContent className="pt-6 text-center px-2">
+            <AlertTriangle className="mx-auto h-6 w-6 text-risk-bad mb-2" />
+            <p className="text-2xl xl:text-3xl font-bold tabular-nums truncate">{data.alertas.length}</p>
+            <p className="text-xs font-medium text-muted-foreground mt-1 uppercase tracking-wider">Alertas</p>
+            <p className="text-[10px] text-muted-foreground">de {data.totalClientes} clientes</p>
           </CardContent>
         </Card>
-        <Card className="border-2">
-          <CardContent className="pt-6 text-center">
-            <Handshake className="mx-auto h-8 w-8 text-primary mb-2" />
-            <p className="text-4xl font-bold tabular-nums">{formatPercent(data.promesaKPI.porcentajeCumplimiento)}</p>
-            <p className="text-sm text-muted-foreground mt-1">Cumplimiento Promesas</p>
-            <p className="text-xs text-muted-foreground">{data.promesaKPI.cumplidas}/{data.promesaKPI.total}</p>
+
+        <Card className="border-2 overflow-hidden">
+          <CardContent className="pt-6 text-center px-2">
+            <Handshake className="mx-auto h-6 w-6 text-primary mb-2" />
+            <p className="text-2xl xl:text-3xl font-bold tabular-nums truncate">
+              {formatPercent(data.promesaKPI.porcentajeCumplimiento)}
+            </p>
+            <p className="text-xs font-medium text-muted-foreground mt-1 uppercase tracking-wider">Cumplimiento</p>
+            <p className="text-[10px] text-muted-foreground">{data.promesaKPI.cumplidas}/{data.promesaKPI.total} promesas</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Top 15 Chart */}
+      {/* Gráfica */}
       {data.top15.length > 0 && (
         <Card className="border-2">
           <CardHeader><CardTitle>Top 15 Clientes con Mayor Deuda Vencida</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={500}>
-              <BarChart data={data.top15} layout="vertical" margin={{ left: 30 }}>
+              <BarChart data={data.top15} layout="vertical" margin={{ left: 30, right: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis type="number" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12 }} />
-                <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v: number) => formatCurrency(v)} labelFormatter={(name) => {
-                  const item = data.top15.find(d => d.name === name);
-                  return item ? `${item.fullName} (DPD: ${item.dpd}d)` : name;
-                }} />
+                <XAxis type="number" tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis type="category" dataKey="name" width={150} />
+                <Tooltip formatter={(v: number) => formatCurrency(v)} />
                 <Bar dataKey="facturado" name="Facturado" fill="hsl(210, 100%, 45%)" radius={[0, 4, 4, 0]} />
                 <Bar dataKey="vencido" name="Vencido" fill="hsl(0, 75%, 55%)" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Alertas */}
-      {data.alertas.length > 0 && (
-        <Card className="border-2 border-risk-critical/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-risk-critical" />Clientes Críticos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {data.alertas.slice(0, 9).map(a => (
-                <div key={a.id} className="flex items-center gap-3 rounded-lg border p-3">
-                  <RiskBadge risk={a.riesgo} dpd={a.dpd} size="sm" />
-                  <div>
-                    <p className="text-sm font-semibold">{a.clienteNombre}</p>
-                    <p className="text-xs text-muted-foreground">DPD: {a.dpd}d · {a.asesorNombre}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
           </CardContent>
         </Card>
       )}
