@@ -189,29 +189,45 @@ export function calcPromesaKPI(promesas: PromesaPago[]): PromesaKPI {
   };
 }
 
-export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Factura[]): AsesorKPI {
+export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Factura[], allPagos?: { factura_id: string; monto: number }[]): AsesorKPI {
   const asesorClientes = clientes.filter(c => c.asesor_id === asesor.id);
   const clienteIds = new Set(asesorClientes.map(c => c.id));
   const asesorFacturas = facturas.filter(f => clienteIds.has(f.cliente_id));
   
-  // Monetary KPIs: ALL clients including buro
-  const totalCartera = asesorFacturas.reduce((s, f) => s + f.monto, 0);
+  // Monetary KPIs: ALL clients including buro - Actualizado para restar los pagos
+  const totalCartera = asesorFacturas.reduce((s, f) => {
+    if (allPagos) {
+      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
+      return s + Math.max(0, f.monto - pagado);
+    }
+    return s + f.monto;
+  }, 0);
   
   const today = new Date();
+  
+  // Actualizado para restar los pagos a la deuda vencida
   const montoVencido = asesorFacturas.filter(f => 
     f.estado === 'vencida' || 
     (f.estado === 'parcial' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0) ||
     (f.estado === 'pendiente' && differenceInDays(today, parseISO(f.fecha_vencimiento)) > 0)
-  ).reduce((s, f) => s + f.monto, 0);
+  ).reduce((s, f) => {
+    if (allPagos) {
+      const pagado = allPagos.filter(p => p.factura_id === f.id).reduce((a, p) => a + Number(p.monto), 0);
+      return s + Math.max(0, f.monto - pagado);
+    }
+    return s + f.monto;
+  }, 0);
   
   // Behavioral KPIs: only activo + riesgo clients, using effective (grupo-aware) KPIs
   const behavioralClients = asesorClientes.filter(c => c.estado_credito !== 'buro');
-  const behavioralKPIs = behavioralClients.map(c => getClienteKPIEffective(c, clientes, facturas));
+  // Se añade allPagos
+  const behavioralKPIs = behavioralClients.map(c => getClienteKPIEffective(c, clientes, facturas, allPagos));
   const promedioDPD = behavioralKPIs.length > 0 
     ? Math.round(behavioralKPIs.reduce((s, k) => s + k.dpd, 0) / behavioralKPIs.length) 
     : 0;
   
-  const allKPIs = asesorClientes.map(c => getClienteKPIEffective(c, clientes, facturas));
+  // Se añade allPagos
+  const allKPIs = asesorClientes.map(c => getClienteKPIEffective(c, clientes, facturas, allPagos));
   const clientesEnRiesgo = allKPIs.filter(k => k.riesgo === 'muy_malo' || k.riesgo === 'pesimo').length;
 
   return {
@@ -225,15 +241,16 @@ export function calcAsesorKPI(asesor: Asesor, clientes: Cliente[], facturas: Fac
   };
 }
 
-export function generateAlertas(clientes: Cliente[], asesores: Asesor[], facturas: Factura[]): Alerta[] {
+// Se añade allPagos como parámetro opcional
+export function generateAlertas(clientes: Cliente[], asesores: Asesor[], facturas: Factura[], allPagos?: { factura_id: string; monto: number }[]): Alerta[] {
   const alertas: Alerta[] = [];
   
   clientes.forEach(cliente => {
     // Skip buro clients from behavioral alerts
     if (cliente.estado_credito === 'buro') return;
     
-    // Use effective KPI so grupo_originadores get consolidated metrics
-    const kpi = getClienteKPIEffective(cliente, clientes, facturas);
+    // Use effective KPI so grupo_originadores get consolidated metrics (se añade allPagos)
+    const kpi = getClienteKPIEffective(cliente, clientes, facturas, allPagos);
     if (kpi.riesgo === 'muy_malo' || kpi.riesgo === 'pesimo') {
       const asesor = asesores.find(a => a.id === cliente.asesor_id);
       alertas.push({
