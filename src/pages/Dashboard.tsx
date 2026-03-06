@@ -31,9 +31,10 @@ export default function Dashboard() {
   const kpis = useMemo(() => {
     if (!clientes || !asesores || !facturas) return null;
     
-    const clienteKPIs = clientes.map(c => getClienteKPIEffective(c, clientes, facturas));
-    const asesorKPIs = asesores.map(a => calcAsesorKPI(a, clientes, facturas));
-    const alertas = generateAlertas(clientes, asesores, facturas);
+    // Se pasa 'allPagos' a las funciones para que descuenten los abonos de los montos totales/vencidos
+    const clienteKPIs = clientes.map(c => getClienteKPIEffective(c, clientes, facturas, allPagos));
+    const asesorKPIs = asesores.map(a => calcAsesorKPI(a, clientes, facturas, allPagos));
+    const alertas = generateAlertas(clientes, asesores, facturas, allPagos);
     const promesaKPI = calcPromesaKPI(allPromesas);
 
     const totalFacturado = facturas.reduce((s, f) => s + f.monto, 0);
@@ -252,4 +253,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
