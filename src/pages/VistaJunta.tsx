@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useClientes, useAsesores, useFacturas, useAllPromesas } from '@/hooks/useData';
+import { useClientes, useAsesores, useFacturas, useAllPromesas, useAllPagos } from '@/hooks/useData';
 import { calcClienteKPI, calcPromesaKPI, generateAlertas, formatCurrency, formatPercent } from '@/lib/kpi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -13,12 +13,21 @@ export default function VistaJunta() {
   const { data: asesores = [] } = useAsesores();
   const { data: facturas = [] } = useFacturas();
   const { data: allPromesas = [] } = useAllPromesas();
+  // Se añade la consulta de pagos para considerar abonos parciales
+  const { data: allPagos = [] } = useAllPagos();
 
   const data = useMemo(() => {
-    const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas));
-    const alertas = generateAlertas(clientes, asesores, facturas);
+    // Se pasa 'allPagos' a los cálculos de KPI y Alertas para descontar abonos
+    const clienteKPIs = clientes.map(c => calcClienteKPI(c, facturas, allPagos));
+    const alertas = generateAlertas(clientes, asesores, facturas, allPagos);
     const promesaKPI = calcPromesaKPI(allPromesas);
-    const totalCartera = facturas.reduce((s, f) => s + f.monto, 0);
+
+    // Cálculo de Cartera Total real (Facturado menos Pagado/Abonado)
+    const totalFacturado = facturas.reduce((s, f) => s + f.monto, 0);
+    const totalPagado = allPagos.reduce((s, p) => s + Number(p.monto), 0);
+    const totalCartera = totalFacturado - totalPagado;
+
+    // El monto vencido ya viene neto desde calcClienteKPI gracias a allPagos
     const montoVencido = clienteKPIs.reduce((s, k) => s + k.montoVencido, 0);
     const promedioDPD = clienteKPIs.length > 0 ? Math.round(clienteKPIs.reduce((s, k) => s + k.dpd, 0) / clienteKPIs.length) : 0;
 
@@ -36,7 +45,7 @@ export default function VistaJunta() {
       }));
 
     return { totalCartera, montoVencido, promedioDPD, alertas, promesaKPI, top15, totalClientes: clientes.length };
-  }, [clientes, asesores, facturas, allPromesas]);
+  }, [clientes, asesores, facturas, allPromesas, allPagos]);
 
   return (
     <div className="min-h-screen bg-background p-6 space-y-8">
