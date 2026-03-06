@@ -23,37 +23,58 @@ export function useAllPromesas() {
 
 export function useCreateAsesor() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { nombre: string; email: string }) => api.createAsesor(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['asesores'] }) });
+  return useMutation({ 
+    mutationFn: (data: { nombre: string; email: string }) => api.createAsesor(data), 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['asesores'] }) 
+  });
 }
 
 export function useUpdateAsesor() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: ({ id, ...data }: { id: string; nombre: string; email: string }) => api.updateAsesor(id, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['asesores'] }) });
+  return useMutation({ 
+    mutationFn: ({ id, ...data }: { id: string; nombre: string; email: string }) => api.updateAsesor(id, data), 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['asesores'] }) 
+  });
 }
 
 export function useDeleteAsesor() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: api.deleteAsesor, onSuccess: () => qc.invalidateQueries({ queryKey: ['asesores'] }) });
+  return useMutation({ 
+    mutationFn: api.deleteAsesor, 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['asesores'] }) 
+  });
 }
 
 export function useCreateCliente() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean; tipo_cliente?: 'normal' | 'grupo_originador' }) => api.createCliente(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
+  return useMutation({ 
+    mutationFn: (data: { nombre: string; asesor_id: string | null; linea_credito: number; parent_cliente_id?: string | null; es_grupo?: boolean; tipo_cliente?: 'normal' | 'grupo_originador' }) => api.createCliente(data), 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['clientes'] }) 
+  });
 }
 
 export function useUpdateCliente() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: ({ id, ...data }: { id: string; nombre?: string; asesor_id?: string | null; linea_credito?: number; parent_cliente_id?: string | null; es_grupo?: boolean }) => api.updateCliente(id, data), onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
+  return useMutation({ 
+    mutationFn: ({ id, ...data }: { id: string; nombre?: string; asesor_id?: string | null; linea_credito?: number; parent_cliente_id?: string | null; es_grupo?: boolean }) => api.updateCliente(id, data), 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['clientes'] }) 
+  });
 }
 
 export function useDeleteCliente() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: api.deleteCliente, onSuccess: () => qc.invalidateQueries({ queryKey: ['clientes'] }) });
+  return useMutation({ 
+    mutationFn: api.deleteCliente, 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['clientes'] }) 
+  });
 }
 
 export function useCreateFactura() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (data: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string; numero_factura?: string }) => api.createFactura(data), onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
+  return useMutation({ 
+    mutationFn: (data: { cliente_id: string; monto: number; fecha_emision: string; fecha_vencimiento: string; estado: string; numero_factura?: string }) => api.createFactura(data), 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['facturas'] }) 
+  });
 }
 
 export function useUpdateFactura() {
@@ -61,18 +82,40 @@ export function useUpdateFactura() {
   return useMutation({ 
     mutationFn: ({ id, ...data }: { id: string; monto?: number; fecha_vencimiento?: string; estado?: string }) => 
       api.updateFactura(id, data), 
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) 
+    onSuccess: async (updatedData) => {
+      // Actualización optimista del caché
+      qc.setQueryData(['facturas'], (oldData: any[]) => {
+        if (!oldData) return oldData;
+        return oldData.map((f) => f.id === updatedData.id ? { ...f, ...updatedData } : f);
+      });
+      // Sincronización en segundo plano
+      await qc.invalidateQueries({ queryKey: ['facturas'] });
+    } 
   });
 }
 
 export function useDeleteFactura() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: api.deleteFactura, onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
+  return useMutation({ 
+    mutationFn: api.deleteFactura, 
+    onSuccess: async (_, deletedId) => {
+      // Eliminación optimista del caché
+      qc.setQueryData(['facturas'], (oldData: any[]) => {
+        if (!oldData) return oldData;
+        return oldData.filter((f) => f.id !== deletedId);
+      });
+      // Sincronización en segundo plano
+      await qc.invalidateQueries({ queryKey: ['facturas'] });
+    } 
+  });
 }
 
 export function useRegistrarPago() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: ({ facturaId, fechaPago }: { facturaId: string; fechaPago: string }) => api.registrarPago(facturaId, fechaPago), onSuccess: () => qc.invalidateQueries({ queryKey: ['facturas'] }) });
+  return useMutation({ 
+    mutationFn: ({ facturaId, fechaPago }: { facturaId: string; fechaPago: string }) => api.registrarPago(facturaId, fechaPago), 
+    onSuccess: async () => await qc.invalidateQueries({ queryKey: ['facturas'] }) 
+  });
 }
 
 // Pagos
@@ -84,9 +127,11 @@ export function useCreatePago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { factura_id: string; monto: number; fecha_pago: string; referencia?: string; registrado_por?: string }) => api.createPago(data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pagos'] });
-      qc.invalidateQueries({ queryKey: ['facturas'] });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['pagos'] }),
+        qc.invalidateQueries({ queryKey: ['facturas'] })
+      ]);
     },
   });
 }
@@ -95,9 +140,11 @@ export function useUpdatePago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string; monto?: number; fecha_pago?: string; referencia?: string }) => api.updatePago(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pagos'] });
-      qc.invalidateQueries({ queryKey: ['facturas'] });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['pagos'] }),
+        qc.invalidateQueries({ queryKey: ['facturas'] })
+      ]);
     },
   });
 }
@@ -106,9 +153,11 @@ export function useDeletePago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.deletePago,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pagos'] });
-      qc.invalidateQueries({ queryKey: ['facturas'] });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['pagos'] }),
+        qc.invalidateQueries({ queryKey: ['facturas'] })
+      ]);
     },
   });
 }
@@ -122,7 +171,7 @@ export function useCreateNotaCobranza() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { cliente_id: string; tipo: string; contenido: string; registrado_por?: string }) => api.createNotaCobranza(data),
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['notas_cobranza', vars.cliente_id] }),
+    onSuccess: async (_d, vars) => await qc.invalidateQueries({ queryKey: ['notas_cobranza', vars.cliente_id] }),
   });
 }
 
@@ -135,9 +184,11 @@ export function useCreatePromesaPago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { cliente_id: string; factura_id?: string; monto_prometido: number; fecha_promesa: string; notas?: string; registrado_por?: string }) => api.createPromesaPago(data),
-    onSuccess: (_d, vars) => {
-      qc.invalidateQueries({ queryKey: ['promesas_pago', vars.cliente_id] });
-      qc.invalidateQueries({ queryKey: ['promesas_pago', 'all'] });
+    onSuccess: async (_d, vars) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['promesas_pago', vars.cliente_id] }),
+        qc.invalidateQueries({ queryKey: ['promesas_pago', 'all'] })
+      ]);
     },
   });
 }
@@ -146,8 +197,8 @@ export function useUpdatePromesaPago() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string; estado: string }) => api.updatePromesaPago(id, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['promesas_pago'] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['promesas_pago'] });
     },
   });
 }
@@ -162,9 +213,11 @@ export function useUpdateClienteEstadoCredito() {
   return useMutation({
     mutationFn: (data: { id: string; estado_credito: 'activo' | 'riesgo' | 'buro'; motivo: string | null; registrado_por: string | null }) =>
       api.updateClienteEstadoCredito(data.id, data.estado_credito, data.motivo, data.registrado_por),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['clientes'] });
-      qc.invalidateQueries({ queryKey: ['historial_buro'] });
+    onSuccess: async () => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['clientes'] }),
+        qc.invalidateQueries({ queryKey: ['historial_buro'] })
+      ]);
     },
   });
 }
